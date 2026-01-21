@@ -276,7 +276,7 @@ if st.button("🚀 DEPLOY EXTRAORDINARY BUSINESS ASSET"):
     <section class="hero-mask px-6 text-center text-white">
         <div class="max-w-[1200px] mx-auto">
             <h1 class="hero-title mb-10 uppercase tracking-tighter leading-none">{h_head}</h1>
-            <p class="text-lg md:text-3xl font-light mb-16 max-w-4xl mx-auto opacity-90 leading-tight">{s_desc}</p>
+            <p class="text-lg md:text-3xl font-light mb-16 max-w-4xl mx-auto opacity-90 leading-tight">{seo_d}</p>
             <a href="tel:{biz_phone}" class="btn-supreme uppercase tracking-[0.4em] text-[10px] md:text-sm shadow-2xl" style="background:var(--p)">Consult an Expert</a>
         </div>
     </section>
