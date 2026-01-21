@@ -5,7 +5,7 @@ import json
 from datetime import datetime
 
 # --- 1. DESIGN STUDIO CONFIGURATION ---
-st.set_page_config(page_title="Kaydiem Titan v9.7 | Supreme Web Architect", layout="wide", page_icon="💎")
+st.set_page_config(page_title="Kaydiem Titan v9.8 | Final Stable Build", layout="wide", page_icon="💎")
 
 st.markdown("""
     <style>
@@ -31,7 +31,7 @@ st.markdown("""
 # --- SIDEBAR: DESIGN STUDIO ---
 with st.sidebar:
     st.image("https://www.gstatic.com/images/branding/product/2x/business_profile_96dp.png", width=50)
-    st.title("Titan v9.7 Studio")
+    st.title("Titan v9.8 Studio")
     
     with st.expander("🎭 1. Layout & DNA", expanded=True):
         layout_dna = st.selectbox("Design DNA", ["Industrial Titan", "Classic Royal", "Soft-UI", "Glass-Tech", "Brutalist", "Corporate Elite"])
@@ -48,117 +48,123 @@ with st.sidebar:
     gsc_tag = st.text_input("GSC Verification Tag")
     st.info("Built by Kaydiem Script Lab")
 
-st.title("🏗️ Kaydiem Titan Supreme v9.7")
+st.title("🏗️ Kaydiem Titan Supreme v9.8")
 
-# --- 2. MULTI-TAB DATA COLLECTION ---
+# --- 2. DATA COLLECTION TABS ---
 tabs = st.tabs(["📍 Identity", "🏗️ Content & SEO", "🖼️ Photo Manager", "⚡ Live E-com", "🌟 Social Proof", "⚖️ Legal"])
 
 with tabs[0]:
     c1, c2 = st.columns(2)
     with c1:
         biz_name = st.text_input("Business Name (NAP)", "MTASCO Equipment Rental")
-        biz_phone = st.text_input("Verified Phone", "+966 50 706 0609")
-        biz_email = st.text_input("Business Email", "rentals@mtasco.sa")
+        biz_phone = st.text_input("Verified Phone Number", "+966 50 706 0609")
+        biz_email = st.text_input("Business Email Address", "rentals@mtasco.sa")
     with c2:
-        biz_cat = st.text_input("Category", "Industrial Machinery")
-        biz_hours = st.text_input("Hours", "Sun-Thu: 08:00 - 17:00")
-        prod_url = st.text_input("Production URL", "https://kani201012.github.io/site/")
-    biz_logo = st.text_input("Logo Image URL")
+        biz_cat = st.text_input("Business Category", "Industrial Machinery")
+        biz_hours = st.text_input("Opening Hours", "Sun-Thu: 08:00 - 17:00")
+        prod_url = st.text_input("Production URL (Trailing /)", "https://kani201012.github.io/site/")
+    biz_logo = st.text_input("Logo Image URL (Direct Link)")
     biz_addr = st.text_area("Full Maps Physical Address")
     biz_areas = st.text_area("Service Areas (Comma separated)", "Al Olaya, Al Mashael, Malham")
     map_iframe = st.text_area("Map Embed HTML Code (<iframe>)")
 
 with tabs[1]:
-    h_head = st.text_input("Hero Headline", "Precision Access: Riyadh's Elite Equipment Partner")
-    seo_d = st.text_input("Meta Description (160 Chars)")
-    biz_key = st.text_input("SEO Keywords")
-    biz_serv = st.text_area("Services (One per line)")
+    hero_h = st.text_input("Main Hero Headline", "Precision Access: Riyadh's Elite Equipment Partner")
+    seo_d = st.text_input("Meta Description (160 Chars)", "MTASCO provides high-performance manlifts and boom lifts for Riyadh projects.")
+    biz_key = st.text_input("SEO Keywords (Comma Separated)")
+    biz_serv = st.text_area("Services Listing (One per line)")
     about_txt = st.text_area("Our Story (800+ Words for E-E-A-T)", height=250)
 
 with tabs[2]:
-    st.header("📸 Photo Manager")
-    custom_hero = st.text_input("Hero Background URL")
-    custom_feat = st.text_input("Feature Image URL")
-    custom_gall = st.text_input("Gallery Image URL")
+    st.header("📸 Premium Photo Management")
+    custom_hero = st.text_input("Hero Background Image URL")
+    custom_feat = st.text_input("Feature Section Image URL")
+    custom_gall = st.text_input("Gallery/About Image URL")
 
 with tabs[3]:
     st.header("⚡ Live Data Feed (Google Sheets CSV)")
-    s_url = st.text_input("Published CSV URL")
+    sheet_url = st.text_input("Published CSV Link")
 
 with tabs[4]:
-    t_data = st.text_area("Testimonials (Name | Quote)")
-    f_data = st.text_area("FAQ (Question? ? Answer)")
+    st.header("🌟 Trust Signals")
+    testi = st.text_area("Client Testimonials (Format: Name | Quote)")
+    faqs = st.text_area("FAQ (Format: Question? ? Answer)")
 
 with tabs[5]:
     st.header("⚖️ Legal Compliance Hub")
-    p_body = st.text_area("Privacy Policy Content", height=300)
-    t_body = st.text_area("Terms Content", height=300)
+    priv_body = st.text_area("Privacy Policy Content", height=300)
+    terms_body = st.text_area("Terms & Conditions Content", height=300)
 
 # --- 3. THE RECTIFIED ENGINE CORE ---
 
 if st.button("🚀 DEPLOY EXTRAORDINARY BUSINESS ASSET"):
     
-    # Image Logic
+    # 3.1 Setup Image Variables
     img_h = custom_hero if custom_hero else "https://images.unsplash.com/photo-1541888946425-d81bb19240f5?auto=format&fit=crop&q=80&w=1600"
     img_f = custom_feat if custom_feat else "https://images.unsplash.com/photo-1517245386807-bb43f82c33c4?auto=format&fit=crop&q=80&w=800"
     img_g = custom_gall if custom_gall else "https://images.unsplash.com/photo-1581094288338-2314dddb7ecb?auto=format&fit=crop&q=80&w=1600"
 
+    # 3.2 Global Asset Variables
     logo_h = f'<img src="{biz_logo}" alt="{biz_name}" class="h-10 md:h-16 w-auto object-contain">' if biz_logo else f'<span class="text-xl md:text-3xl font-black tracking-tighter" style="color:var(--p)">{biz_name}</span>'
-
-    a_list = [a.strip() for a in biz_areas.split(",")]
-    s_areas_json = json.dumps(a_list)
+    area_list = [a.strip() for a in biz_areas.split(",")]
+    s_areas_json = json.dumps(area_list)
     wa_c = biz_phone.replace(" ", "").replace("+", "")
+    wa_u = f"https://wa.me/{wa_c}?text=Hello%20{biz_name.replace(' ', '%20')},%20interested%20in%20your%20services."
 
+    # 3.3 The CSS Theme
     theme_css = f"""
     :root {{ --p: {p_color}; --s: {s_color}; --radius: {border_rad}; }}
     * {{ box-sizing: border-box; }}
     html, body {{ margin: 0; padding: 0; width: 100%; overflow-x: hidden; position: relative; scroll-behavior: smooth; }}
     body {{ font-family: '{b_font}', sans-serif; color: #0f172a; line-height: 1.7; background: #fff; }}
-    h1, h2, h3 {{ font-family: '{h_font}', sans-serif; font-weight: {h_weight}; letter-spacing: {ls}; text-transform: uppercase; line-height: 1.05; overflow-wrap: break-word; }}
+    h1, h2, h3 {{ font-family: '{h_font}', sans-serif; font-weight: {h_weight}; letter-spacing: {ls}; text-transform: uppercase; line-height: 1.1; overflow-wrap: break-word; }}
     
-    .hero-title {{ font-size: clamp(1.5rem, 8vw, 100px); text-shadow: 0 4px 20px rgba(0,0,0,0.4); }}
+    .hero-title {{ font-size: clamp(1.6rem, 8vw, 105px); text-shadow: 0 4px 20px rgba(0,0,0,0.4); }}
     .section-title {{ font-size: clamp(1.8rem, 6vw, 75px); color: var(--p); }}
     
-    .btn-supreme {{ background: var(--s); color: white; padding: 1rem 2.5rem; border-radius: var(--radius); font-weight: 900; transition: all 0.4s; display: inline-block; text-align: center; border:none; box-shadow: 0 10px 20px -5px var(--s); }}
+    .btn-supreme {{ background: var(--s); color: white; padding: 1rem 2.5rem; border-radius: var(--radius); font-weight: 900; transition: all 0.4s; display: inline-block; text-align: center; border:none; box-shadow: 0 10px 20px -5px var(--s); cursor: pointer; text-decoration:none; }}
+    .btn-supreme:hover {{ transform: translateY(-3px); filter: brightness(1.1); box-shadow: 0 20px 40px -5px var(--s); }}
+    
     .glass-nav {{ background: rgba(255, 255, 255, 0.98); backdrop-filter: blur(15px); border-bottom: 1px solid rgba(0,0,0,0.05); width: 100%; z-index: 9999; position: fixed; top: 0; }}
     
     .hero-mask {{ 
         background: linear-gradient(rgba(0,0,0,0.75), rgba(0,0,0,0.6)), url('{img_h}'); 
         background-size: cover; background-position: center; 
-        min-height: 85vh; display: flex; align-items: center; justify-content: center; 
-        width: 100%; padding: 120px 20px 60px 20px;
+        min-height: 90vh; display: flex; align-items: center; justify-content: center; 
+        width: 100%; padding: 140px 20px 60px 20px;
     }}
     
-    .product-card {{ background: white; border-radius: var(--radius); padding: 2rem; border: 1px solid #f1f5f9; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.05); transition: 0.3s; cursor: pointer; }}
-    #modal {{ display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 100000; padding: 1rem; align-items: center; justify-content: center; overflow-y: auto; }}
+    .product-card {{ background: white; border-radius: var(--radius); padding: 2.5rem; border: 1px solid #f1f5f9; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.05); transition: 0.3s; cursor: pointer; }}
+    #modal {{ display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 100000; padding: 1.5rem; align-items: center; justify-content: center; overflow-y: auto; }}
     .modal-content {{ background: white; max-width: 1100px; width: 100%; border-radius: var(--radius); overflow: hidden; position: relative; }}
     .legal-text {{ white-space: pre-wrap; word-wrap: break-word; font-size: 1.1rem; color: #334155; line-height: 1.9; padding: 20px 0; }}
     .legal-bold-title {{ font-weight: 900; font-size: clamp(2.2rem, 6vw, 4.5rem); color: var(--p); margin-bottom: 2rem; text-transform: uppercase; line-height: 1; }}
-    .wa-float {{ position: fixed; bottom: 30px; right: 30px; background: #25d366; color: white; width: 60px; height: 60px; border-radius: 50px; display: flex; align-items: center; justify-content: center; z-index: 99999; box-shadow: 0 10px 20px rgba(0,0,0,0.2); }}
+    .wa-float {{ position: fixed; bottom: 30px; right: 30px; background: #25d366; color: white; width: 60px; height: 60px; border-radius: 50px; display: flex; align-items: center; justify-content: center; z-index: 99999; box-shadow: 0 10px 20px rgba(0,0,0,0.2); transition: 0.3s ease; text-decoration:none; }}
+    .wa-float:hover {{ transform: scale(1.1); }}
     """
 
     def get_layout(title, desc, content, is_index=False):
         v_tag = f'<meta name="google-site-verification" content="{gsc_tag}">' if (is_index and gsc_tag) else ""
         
         dynamic_script = ""
-        if is_index and s_url:
+        if is_index and sheet_url:
             dynamic_script = f"""
             <script>
             let currentProducts = [];
             async function fetchLiveData() {{
                 try {{
-                    const response = await fetch('{s_url}');
+                    const response = await fetch('{sheet_url}');
                     const csv = await response.text();
                     if (csv.trim().startsWith("<!DOCTYPE") || csv.trim().startsWith("<html")) {{
                         document.getElementById('live-data-container').innerHTML = "<div class='col-span-full p-20 text-center bg-red-50 text-red-600 rounded-3xl font-bold uppercase'>Data Source Error: Please use CSV Link.</div>";
                         return;
                     }}
-                    const rows = csv.split('\\n').map(row => row.split('|')).slice(1);
+                    const rows = csv.split('\\n').map(row => row.split(',')).slice(1);
                     const container = document.getElementById('live-data-container');
                     container.innerHTML = "";
                     rows.forEach((parts, index) => {{
                         if (parts.length >= 2) {{
-                            const p = {{ id: index, name: parts[0].trim(), price: parts[1].trim(), desc: (parts[2] || "").trim(), img1: (parts[3] || "{img_f}").trim() }};
+                            const p = {{ id: index, name: parts[0].replace(/"/g, "").trim(), price: parts[1].replace(/"/g, "").trim(), desc: (parts[2] || "").replace(/"/g, "").trim(), img1: (parts[3] || "{img_f}").trim() }};
                             currentProducts.push(p);
                             container.innerHTML += `
                             <div onclick="openProduct(${{index}})" class="product-card flex flex-col justify-between transition-all hover:scale-[1.03]">
@@ -179,7 +185,7 @@ if st.button("🚀 DEPLOY EXTRAORDINARY BUSINESS ASSET"):
                 document.getElementById('m-price').innerText = p.price;
                 document.getElementById('m-desc').innerText = p.desc;
                 document.getElementById('m-img-1').src = p.img1;
-                document.getElementById('m-wa').href = "https://wa.me/{wa_c}?text=" + encodeURIComponent("Interest in " + p.name);
+                document.getElementById('m-wa').href = "https://wa.me/{wa_c}?text=" + encodeURIComponent("I am interested in " + p.name);
                 document.getElementById('modal').style.display = 'flex';
                 document.body.style.overflow = 'hidden';
             }}
@@ -202,13 +208,15 @@ if st.button("🚀 DEPLOY EXTRAORDINARY BUSINESS ASSET"):
     {{ "@context": "https://schema.org", "@type": "LocalBusiness", "name": "{biz_name}", "address": {{ "@type": "PostalAddress", "streetAddress": "{biz_addr}" }}, "telephone": "{biz_phone}", "areaServed": {s_areas_json} }}
     </script>
 </head>
-<body class="bg-white flex flex-col min-h-screen text-slate-900">
-    <nav class="glass-nav sticky top-0 z-50 p-4 md:p-6 shadow-sm">
+<body class="bg-white">
+    <nav class="glass-nav p-4 md:p-6 shadow-sm">
         <div class="max-w-[1440px] mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-            <a href="index.html">{logo_h}</a>
+            <a href="index.html" class="flex items-center text-decoration-none">{logo_h}</a>
             <div class="flex items-center space-x-6 md:space-x-12 text-[10px] md:text-xs font-black uppercase tracking-widest text-slate-600">
-                <a href="index.html" class="hover:text-blue-600">Home</a> <a href="about.html" class="hover:text-blue-600">About</a> <a href="contact.html" class="hover:text-blue-600">Contact</a>
-                <a href="tel:{biz_phone}" class="bg-slate-900 text-white px-5 py-2 rounded-full font-bold shadow-lg">Call</a>
+                <a href="index.html" class="hover:text-blue-600 no-underline">Home</a> 
+                <a href="about.html" class="hover:text-blue-600 no-underline">About</a> 
+                <a href="contact.html" class="hover:text-blue-600 no-underline">Contact</a>
+                <a href="tel:{biz_phone}" class="bg-slate-900 text-white px-5 py-2 rounded-full font-bold shadow-lg no-underline">Call</a>
             </div>
         </div>
     </nav>
@@ -224,8 +232,8 @@ if st.button("🚀 DEPLOY EXTRAORDINARY BUSINESS ASSET"):
                     <h2 id="m-title" class="text-4xl font-black mb-4 uppercase text-p" style="color:var(--p)"></h2>
                     <p id="m-price" class="text-3xl font-black mb-8 text-s" style="color:var(--s)"></p>
                     <p id="m-desc" class="text-slate-600 mb-12 leading-relaxed text-lg"></p>
-                    <a id="m-wa" href="#" target="_blank" class="btn-supreme w-full uppercase tracking-widest shadow-2xl">Confirm Booking</a>
-                    <button onclick="document.getElementById('modal').style.display='none'; document.body.style.overflow='auto';" class="text-xs font-black uppercase tracking-widest opacity-30 mt-8 underline">Close Window</button>
+                    <a id="m-wa" href="#" target="_blank" class="btn-supreme w-full uppercase tracking-widest shadow-2xl">Confirm Now</a>
+                    <button onclick="document.getElementById('modal').style.display='none'; document.body.style.overflow='auto';" class="text-xs font-black uppercase tracking-widest opacity-30 mt-8 underline no-underline">Close Window</button>
                 </div>
             </div>
         </div>
@@ -237,14 +245,14 @@ if st.button("🚀 DEPLOY EXTRAORDINARY BUSINESS ASSET"):
         <div class="max-w-[1440px] mx-auto grid md:grid-cols-4 gap-16 text-left">
             <div class="col-span-2">
                 <h4 class="text-white text-3xl font-black mb-8 uppercase tracking-tighter">{biz_name}</h4>
-                <p class="text-sm leading-relaxed mb-10 max-w-md">{biz_addr}</p>
+                <p class="text-sm leading-relaxed mb-10 max-w-md text-slate-500">{biz_addr}</p>
                 <div class="bg-slate-900/50 p-6 border border-slate-800 rounded-3xl">
                     <h5 class="text-white text-[10px] font-black uppercase tracking-widest mb-4 opacity-50">Verified Coverage</h5>
-                    <div class="flex flex-wrap gap-2">{"".join([f'<span class="bg-slate-800 text-[10px] px-3 py-1 rounded-full uppercase font-bold text-white tracking-widest border border-slate-700">{a}</span>' for a in a_list])}</div>
+                    <div class="flex flex-wrap gap-2">{"".join([f'<span class="bg-slate-800 text-[10px] px-3 py-1 rounded-full uppercase font-bold text-white border border-slate-700">{a}</span>' for a in area_list])}</div>
                 </div>
-                <p class="text-[10px] mt-10 opacity-30 uppercase font-black tracking-widest italic tracking-widest underline decoration-white underline-offset-8 decoration-2">Architected By Kaydiem Script Lab</p>
+                <p class="text-[10px] mt-10 opacity-30 uppercase font-black tracking-widest italic tracking-widest underline decoration-white underline-offset-8 decoration-2">Architected By <a href="https://www.kaydiemscriptlab.com" class="text-white underline">Kaydiem Script Lab</a></p>
             </div>
-            <div><h4 class="text-white font-bold mb-8 uppercase text-xs">Technical Hub</h4><ul class="space-y-4 text-sm font-bold uppercase tracking-widest"><li><a href="privacy.html" class="hover:text-white transition">Privacy Policy</a></li><li><a href="terms.html" class="hover:text-white transition">Terms</a></li></ul></div>
+            <div><h4 class="text-white font-bold mb-8 uppercase text-xs tracking-widest">Policy</h4><ul class="space-y-4 text-sm font-bold uppercase tracking-widest list-none p-0"><li><a href="privacy.html" class="hover:text-white transition no-underline">Privacy</a></li><li><a href="terms.html" class="hover:text-white transition no-underline">Terms</a></li></ul></div>
             <div><h4 class="text-white font-bold mb-8 uppercase text-xs tracking-widest text-brand" style="color:var(--s)">Direct Connect</h4><p class="text-lg font-bold text-white leading-loose">{biz_phone}<br>{biz_email}</p></div>
         </div>
     </footer>
@@ -252,36 +260,22 @@ if st.button("🚀 DEPLOY EXTRAORDINARY BUSINESS ASSET"):
 </body></html>"""
 
     # --- CONTENT CONSTRUCTORS ---
-    serv_html = "".join([f'<div class="bg-slate-50 p-12 rounded-[2.5rem] border border-slate-100 shadow-xl hover:scale-[1.02] transition-transform"><h3 class="text-2xl font-black mb-4 uppercase" style="color:var(--p)">{s.strip()}</h3><p class="text-slate-500 text-sm leading-relaxed font-bold uppercase tracking-tight italic text-left">Premium technical solution for {biz_name}.</p></div>' for s in biz_serv.splitlines() if s.strip()])
-    
-    t_cards = ""
-    for t in t_data.splitlines():
-        if "|" in t:
-            parts = t.split("|")
-            t_cards += f'<div class="p-10 bg-slate-50 rounded-[3rem] border border-slate-100 italic text-xl shadow-inner mb-8">"{parts[1].strip()}"<br><span class="font-black not-italic text-sm block mt-6 uppercase tracking-widest text-brand" style="color:var(--p)">— {parts[0].strip()} <span class="text-emerald-500 font-black ml-2">● Partner</span></span></div>'
+    serv_html = "".join([f'<div class="bg-slate-50 p-12 rounded-[2.5rem] border border-slate-100 shadow-xl hover:scale-[1.02] transition-transform"><h3 class="text-2xl font-black mb-4 uppercase" style="color:var(--p)">{s.strip()}</h3><p class="text-slate-500 text-sm leading-relaxed font-bold uppercase tracking-tight italic text-left">Verified technical solution for {biz_name}.</p></div>' for s in biz_serv.splitlines() if s.strip()])
+    t_cards = "".join([f'<div class="p-10 bg-slate-50 rounded-[3rem] border border-slate-100 italic text-xl shadow-inner mb-8">"{t.split("|")[1].strip()}"<br><span class="font-black not-italic text-sm block mt-6 uppercase tracking-widest text-brand" style="color:var(--p)">— {t.split("|")[0].strip()} <span class="text-emerald-500 font-black ml-2">● Partner</span></span></div>' for t in testi.splitlines() if "|" in t])
+    f_cards = "".join([f'<details class="mb-6 bg-white p-6 rounded-2xl border border-slate-100 cursor-pointer shadow-sm"><summary class="font-black text-lg uppercase tracking-tight">{f.split("?")[0].strip()}?</summary><p class="mt-4 text-slate-600 leading-relaxed font-medium">{f.split("?")[1].strip()}</p></details>' for f in faqs.splitlines() if "?" in f])
 
-    f_cards = ""
-    for f in f_data.splitlines():
-        if "?" in f:
-            parts = f.rsplit("?", 1)
-            if len(parts) > 1:
-                q = parts[0].strip() + "?"
-                a = parts[1].strip()
-                if a.startswith("?"): a = a[1:].strip()
-                f_cards += f'<details class="mb-6 bg-white p-6 rounded-2xl border border-slate-100 cursor-pointer shadow-sm"><summary class="font-black text-lg uppercase tracking-tight">{q}</summary><p class="mt-4 text-slate-600 leading-relaxed font-medium">{a}</p></details>'
-
-    d_section = f"""<section class="py-32 px-6 max-w-[1440px] mx-auto text-center border-b"><h2 class="section-title mb-20 uppercase tracking-tighter" style="color:var(--p)">Verified Packages</h2><div id="live-data-container" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-10 text-left"><p class="p-20 text-center text-slate-400 font-bold animate-pulse uppercase tracking-widest">Connecting to Data Hub...</p></div></section>""" if s_url else ""
+    d_section = f"""<section class="py-32 px-6 max-w-[1440px] mx-auto text-center border-b"><h2 class="section-title mb-20 uppercase tracking-tighter" style="color:var(--p)">Verified Inventory</h2><div id="live-data-container" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-8 text-left"><p class="p-20 text-center text-slate-400 font-bold animate-pulse uppercase tracking-widest">Connecting to Data Hub...</p></div></section>""" if sheet_url else ""
 
     idx_content = f"""
     <section class="hero-mask px-6 text-center text-white">
         <div class="max-w-[1200px] mx-auto">
-            <h1 class="hero-title mb-10 uppercase tracking-tighter leading-none">{h_head}</h1>
+            <h1 class="hero-title mb-10 uppercase tracking-tighter leading-none">{hero_h}</h1>
             <p class="text-lg md:text-3xl font-light mb-16 max-w-4xl mx-auto opacity-90 leading-tight">{seo_d}</p>
             <a href="tel:{biz_phone}" class="btn-supreme uppercase tracking-[0.4em] text-[10px] md:text-sm shadow-2xl" style="background:var(--p)">Consult an Expert</a>
         </div>
     </section>
     <section class="max-w-[1440px] mx-auto py-24 px-6 text-center border-b">
-        <h2 class="section-title mb-20 uppercase tracking-tighter" style="color:var(--p)">Core Specialties</h2>
+        <h2 class="section-title mb-20 uppercase tracking-tighter" style="color:var(--p)">Core Competencies</h2>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-10 text-left">{serv_html}</div>
     </section>
     {d_section}
@@ -289,9 +283,9 @@ if st.button("🚀 DEPLOY EXTRAORDINARY BUSINESS ASSET"):
         <div class="max-w-[1440px] mx-auto grid md:grid-cols-2 gap-24 items-center">
             <img src="{img_f}" class="shadow-2xl" style="border-radius: var(--radius)">
             <div>
-                <h2 class="text-5xl font-black mb-12 uppercase tracking-tighter leading-none" style="color:var(--p)">Verified Authority</h2>
+                <h2 class="text-5xl font-black mb-12 uppercase tracking-tighter leading-none" style="color:var(--p)">Verified Heritage</h2>
                 <p class="text-2xl text-slate-600 mb-12 leading-relaxed italic">"Supplying the engineering foundation for the 2026 city landscape. Precision execution, certified safety, and direct quality oversight."</p>
-                <a href="about.html" class="btn-supreme text-xs tracking-widest uppercase">View Full Story</a>
+                <a href="about.html" class="btn-supreme text-xs tracking-widest uppercase">Our Story</a>
             </div>
         </div>
     </section>
@@ -299,16 +293,16 @@ if st.button("🚀 DEPLOY EXTRAORDINARY BUSINESS ASSET"):
     """
 
     # --- ZIP OUTPUT ---
-    zip_buf = io.BytesIO()
-    with zipfile.ZipFile(zip_buf, "a", zipfile.ZIP_DEFLATED, False) as zf:
-        zf.writestr("index.html", get_layout("Home", s_desc, idx_content, True))
-        zf.writestr("about.html", get_layout("About", "Our History", f"<section class='max-w-7xl mx-auto py-32 px-6'><h1 class='legal-bold-title'>About Our Heritage</h1><div class='text-xl md:text-2xl leading-relaxed text-slate-700 legal-text'>{about_txt}</div><img src='{img_g}' class='mt-20 w-full h-[600px] object-cover shadow-2xl' style='border-radius: var(--radius)'></section>"))
-        zf.writestr("contact.html", get_layout("Contact", "Location", f"<section class='max-w-[1440px] mx-auto py-32 px-6 text-center'><h1 class='legal-bold-title uppercase'>Technical Hub</h1><div class='grid md:grid-cols-2 gap-16 text-left'><div class='bg-slate-950 p-12 md:p-24 text-white' style='border-radius: var(--radius)'><p class='text-4xl font-black mb-8 text-white'>{biz_phone}</p><p class='text-2xl mb-12 opacity-80'>{biz_addr}</p></div><div class='rounded-[3rem] overflow-hidden border shadow-2xl bg-slate-100' style='min-height:300px'>{map_iframe}</div></div></section>"))
-        zf.writestr("privacy.html", get_layout("Privacy", "Legal", f"<div class='max-w-4xl mx-auto py-32 px-10'><h1 class='legal-bold-title'>Privacy Policy</h1><div class='text-lg legal-text'>{priv_body}</div></div>"))
-        zf.writestr("terms.html", get_layout("Terms", "Legal", f"<div class='max-w-4xl mx-auto py-32 px-10'><h1 class='legal-bold-title'>Terms & Conditions</h1><div class='text-lg legal-text'>{terms_body}</div></div>"))
-        zf.writestr("404.html", get_layout("404", "Not Found", "<div class='py-64 text-center'><h1 class='text-[120px] font-black uppercase tracking-widest'>404</h1></div>"))
+    z_b = io.BytesIO()
+    with zipfile.ZipFile(z_b, "a", zipfile.ZIP_DEFLATED, False) as z_f:
+        z_f.writestr("index.html", get_layout("Home", seo_d, idx_content, True))
+        z_f.writestr("about.html", get_layout("About", "History", f"<section class='max-w-7xl mx-auto py-32 px-6'><h1 class='legal-bold-title'>About Our Heritage</h1><div class='text-xl md:text-2xl leading-relaxed text-slate-700 legal-text'>{about_txt}</div><img src='{img_g}' class='mt-20 w-full h-[600px] object-cover shadow-2xl' style='border-radius: var(--radius)'></section>"))
+        z_f.writestr("contact.html", get_layout("Contact", "Location", f"<section class='max-w-[1440px] mx-auto py-32 px-6 text-center'><h1 class='legal-bold-title uppercase'>Technical Hub</h1><div class='grid md:grid-cols-2 gap-16 text-left'><div class='bg-slate-950 p-12 md:p-24 text-white' style='border-radius: var(--radius)'><p class='text-4xl font-black mb-8 text-white'>{biz_phone}</p><p class='text-2xl mb-12 opacity-80'>{biz_addr}</p></div><div class='rounded-[3rem] overflow-hidden border shadow-2xl bg-slate-100' style='min-height:300px'>{map_iframe}</div></div></section>"))
+        z_f.writestr("privacy.html", get_layout("Privacy", "Legal", f"<div class='max-w-4xl mx-auto py-32 px-10'><h1 class='legal-bold-title'>Privacy Policy</h1><div class='text-lg legal-text'>{priv_body}</div></div>"))
+        z_f.writestr("terms.html", get_layout("Terms", "Legal", f"<div class='max-w-4xl mx-auto py-32 px-10'><h1 class='legal-bold-title'>Terms & Conditions</h1><div class='text-lg legal-text'>{terms_body}</div></div>"))
+        z_f.writestr("404.html", get_layout("404", "Not Found", "<div class='py-64 text-center'><h1 class='text-[120px] font-black uppercase tracking-widest text-slate-200'>404</h1></div>"))
         zf.writestr("robots.txt", f"User-agent: *\nAllow: /\nSitemap: {prod_url}sitemap.xml")
         zf.writestr("sitemap.xml", f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>{prod_url}index.html</loc></url><url><loc>{prod_url}about.html</loc></url></urlset>')
 
-    st.success("💎 TITAN SUPREME v9.7 RECTIFIED. Fixed variable names and padding.")
-    st.download_button("📥 DOWNLOAD COMPLETE BIZ PACKAGE", zip_buf.getvalue(), f"{biz_name.lower()}_v9_7.zip")
+    st.success("💎 TITAN SUPREME v9.8 RECTIFIED. Fixed variable names and padding.")
+    st.download_button("📥 DOWNLOAD COMPLETE BIZ PACKAGE", z_b.getvalue(), f"{biz_name.lower()}_v9_8.zip")
