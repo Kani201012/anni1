@@ -1,313 +1,637 @@
 import streamlit as st
 import zipfile
 import io
-import json
-from datetime import datetime
+import urllib.parse
 
 # --- 1. APP CONFIGURATION ---
-st.set_page_config(page_title="Kaydiem Titan v10.0 | Platinum Web Architect", layout="wide", page_icon="💎")
+st.set_page_config(
+    page_title="Titan v26.2 | Omni Architect", 
+    layout="wide", 
+    page_icon="⚡",
+    initial_sidebar_state="expanded"
+)
 
-# Dashboard UI Styling
+# --- 2. ADVANCED UI SYSTEM (CSS) ---
 st.markdown("""
     <style>
-    .main { background: #0f172a; color: white; }
-    .stTabs [data-baseweb="tab"] { color: white; font-weight: bold; font-size: 1.1rem; }
-    .stButton>button { 
-        width: 100%; border-radius: 12px; height: 4.5em; 
-        background: linear-gradient(135deg, #4f46e5 0%, #7c3aed 100%); 
-        color: white; font-weight: 900; border: none; font-size: 1.4rem;
-        box-shadow: 0 10px 30px rgba(79, 70, 229, 0.4); transition: all 0.3s;
+    /* UI Reset & Variables */
+    :root { --primary: #0f172a; --accent: #3b82f6; }
+    .stApp { background-color: #f8fafc; color: #1e293b; font-family: 'Inter', sans-serif; }
+    
+    /* Sidebar Styling */
+    [data-testid="stSidebar"] { background-color: #ffffff; border-right: 1px solid #e2e8f0; }
+    [data-testid="stSidebar"] h1 { 
+        background: linear-gradient(90deg, #0f172a, #3b82f6);
+        -webkit-background-clip: text;
+        -webkit-text-fill-color: transparent;
+        font-weight: 900 !important;
+        font-size: 1.8rem !important;
     }
-    .stButton>button:hover { transform: translateY(-2px); filter: brightness(1.2); }
+    
+    /* Modern Inputs */
+    .stTextInput input, .stTextArea textarea, .stSelectbox div[data-baseweb="select"] {
+        background-color: #ffffff !important;
+        border: 1px solid #cbd5e1 !important;
+        border-radius: 8px !important;
+        color: #0f172a !important;
+        transition: all 0.2s ease;
+    }
+    .stTextInput input:focus, .stTextArea textarea:focus {
+        border-color: #3b82f6 !important;
+        box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1) !important;
+    }
+    
+    /* Action Buttons */
+    .stButton>button {
+        width: 100%; border-radius: 8px; height: 3.5rem;
+        background: linear-gradient(135deg, #0f172a 0%, #2563eb 100%);
+        color: white; font-weight: 800; border: none;
+        box-shadow: 0 4px 15px rgba(37, 99, 235, 0.3);
+        text-transform: uppercase; letter-spacing: 1px;
+        transition: transform 0.2s;
+    }
+    .stButton>button:hover { transform: translateY(-2px); }
+
+    /* Preview Frame */
+    iframe { border-radius: 12px; border: 1px solid #e2e8f0; box-shadow: 0 20px 40px -10px rgba(0,0,0,0.1); }
     </style>
     """, unsafe_allow_html=True)
 
-# --- SIDEBAR: DESIGN STUDIO ---
+# --- 3. SIDEBAR: THE CONTROL CENTER ---
 with st.sidebar:
-    st.image("https://www.gstatic.com/images/branding/product/2x/business_profile_96dp.png", width=50)
-    st.title("Titan v10.0 Studio")
+    st.title("Titan Architect")
+    st.caption("v26.2 | Omni Core")
+    st.divider()
     
-    with st.expander("🎭 1. Layout & DNA", expanded=True):
-        layout_dna = st.selectbox("Design DNA", ["Industrial Titan", "Classic Royal", "Soft-UI", "Glass-Tech", "Brutalist", "Corporate Elite"])
-        p_color = st.color_picker("Primary Brand Color", "#4A0E0E")
-        s_color = st.color_picker("Accent/CTA Color", "#D4AF37")
-        border_rad = st.select_slider("Corner Roundness", options=["0px", "4px", "12px", "24px", "40px", "60px"], value="40px")
+    # 3.1 VISUAL DNA
+    with st.expander("🎨 Visual DNA", expanded=True):
+        theme_mode = st.selectbox("Base Theme", [
+            "Clean Corporate (Light)", 
+            "Midnight SaaS (Dark)", 
+            "Glassmorphism (Blur)",
+            "Cyberpunk Neon",
+            "Luxury Gold",
+            "Forest Eco",
+            "Ocean Breeze",
+            "Stark Minimalist"
+        ])
+        c1, c2 = st.columns(2)
+        p_color = c1.color_picker("Primary Brand", "#0F172A") 
+        s_color = c2.color_picker("Action (CTA)", "#3B82F6")  
+        
+        st.markdown("**Typography**")
+        h_font = st.selectbox("Headings", ["Space Grotesk", "Montserrat", "Playfair Display", "Oswald", "Clash Display"])
+        b_font = st.selectbox("Body Text", ["Inter", "Roboto", "Open Sans", "Satoshi", "Lora"])
+        
+        st.markdown("**UI Physics**")
+        border_rad = st.select_slider("Corner Roundness", ["0px", "4px", "12px", "24px", "40px"], value="12px")
+        anim_type = st.selectbox("Animation Style", ["Fade Up", "Zoom In", "Slide Right", "None"])
 
-    with st.expander("✍️ 2. Typography Studio", expanded=True):
-        h_font = st.selectbox("Heading Font", ["Playfair Display", "Oswald", "Montserrat", "Syncopate", "Inter"])
-        b_font = st.selectbox("Body Font", ["Montserrat", "Inter", "Roboto", "Open Sans"])
-        h_weight = st.select_slider("Weight", options=["300", "400", "700", "900"], value="700")
-        ls = st.select_slider("Spacing", options=["-0.05em", "-0.02em", "0em", "0.05em", "0.1em"], value="0.05em")
+    # 3.2 MODULE MANAGER
+    with st.expander("🧩 Section Manager", expanded=False):
+        st.caption("Toggle sections to include:")
+        show_hero = st.checkbox("Hero Header", value=True)
+        show_stats = st.checkbox("Trust Stats/Logos", value=True)
+        show_features = st.checkbox("Feature Grid", value=True)
+        show_inventory = st.checkbox("Live Inventory (CSV)", value=True)
+        show_gallery = st.checkbox("Visual Gallery", value=True)
+        show_testimonials = st.checkbox("Testimonials", value=True)
+        show_faq = st.checkbox("F.A.Q.", value=True)
+        show_cta = st.checkbox("Final Call to Action", value=True)
 
-    gsc_tag = st.text_input("GSC Verification Tag")
-    st.info("Built by Kaydiem Script Lab")
+    # 3.3 TECHNICAL
+    with st.expander("⚙️ SEO & Analytics", expanded=False):
+        gsc_tag = st.text_input("Google Verification ID")
+        ga_tag = st.text_input("Google Analytics ID (G-XXXX)")
+        og_image = st.text_input("Social Share Image URL")
 
-st.title("🏗️ Kaydiem Titan Supreme v10.0")
+# --- 4. MAIN WORKSPACE ---
+st.title("🏗️ Site Content Builder")
 
-# --- 2. MULTI-TAB DATA COLLECTION ---
-tabs = st.tabs(["📍 Identity", "🏗️ Content & SEO", "🖼️ Photos", "⚡ Live E-com", "🌟 Social Proof", "⚖️ Legal"])
+tabs = st.tabs(["1. Identity", "2. Content Blocks", "3. Inventory", "4. Legal & Footer"])
 
 with tabs[0]:
     c1, c2 = st.columns(2)
     with c1:
-        biz_name = st.text_input("Business Name (NAP)", "Red Hippo (The Planners)")
-        biz_phone = st.text_input("Verified Phone", "+91 84540 02711")
-        biz_email = st.text_input("Business Email", "events@redhippoplanners.in")
+        biz_name = st.text_input("Business Name", "Nova Dynamics")
+        biz_tagline = st.text_input("Tagline", "Future-Proof Your Infrastructure")
+        biz_phone = st.text_input("Phone", "+1 (555) 000-0000")
+        biz_email = st.text_input("Email", "hello@novadynamics.io")
     with c2:
-        biz_cat = st.text_input("Category", "Luxury Wedding Planner")
-        biz_hours = st.text_input("Hours", "Mon-Sun: 10:00 - 19:00")
-        prod_url = st.text_input("URL", "https://kani201012.github.io/site/")
-    biz_logo = st.text_input("Logo Image URL")
-    biz_addr = st.text_area("Full Maps Address")
-    biz_areas = st.text_area("Service Areas (Comma separated)", "Vasant Kunj, Chhatarpur, South Delhi")
-    map_iframe = st.text_area("Map Embed Code (<iframe>)")
+        prod_url = st.text_input("Website URL (Required for Sitemap)", "https://novadynamics.io")
+        biz_addr = st.text_area("Address", "101 Tech Plaza, Silicon Valley, CA", height=100)
+        map_iframe = st.text_area("Google Map Embed Code", placeholder='<iframe src="..."></iframe>', height=100)
+        seo_d = st.text_area("Meta Description (SEO)", "The leading provider of advanced solutions for modern enterprises.", height=100)
+        logo_url = st.text_input("Logo URL (PNG/SVG)")
+        
+    st.subheader("Social Links")
+    sc1, sc2, sc3 = st.columns(3)
+    wa_num = sc1.text_input("WhatsApp Number (No +)", "15550000000")
+    li_link = sc2.text_input("LinkedIn URL")
+    ig_link = sc3.text_input("Instagram URL")
 
 with tabs[1]:
-    hero_h = st.text_input("Hero Headline", "Crafting Dream Weddings")
-    seo_d = st.text_input("Meta Description (160 Chars)")
-    biz_key = st.text_input("SEO Keywords")
-    biz_serv = st.text_area("Services (One per line)")
-    about_txt = st.text_area("Our Story (800+ Words)", height=250)
+    st.subheader("Hero Section")
+    hero_h = st.text_input("Hero Headline", "Build Faster. Scale Smarter.")
+    hero_sub = st.text_input("Hero Subtext", "The all-in-one solution for modern enterprises looking to dominate their local market.")
+    # FIX: Added logic to handle empty hero images gracefully
+    hero_img = st.text_input("Hero Background Image", "https://images.unsplash.com/photo-1497366216548-37526070297c?auto=format&fit=crop&q=80&w=1600")
+    
+    st.subheader("Feature Grid")
+    f_title = st.text_input("Features Title", "Our Expertise")
+    feat_data = st.text_area("Features List (Title | Description)", 
+                             "Global Reach | We operate in 50+ countries.\n24/7 Support | Always here when you need us.\nSecure Core | Bank-grade encryption standard.",
+                             height=150)
+    
+    st.subheader("About / Gallery")
+    about_h = st.text_input("About Title", "Our Legacy")
+    about_txt = st.text_area("About Description", "Founded in 2020, Nova Dynamics has revolutionized the way businesses approach digital transformation...", height=150)
+    about_img = st.text_input("About Side Image", "https://images.unsplash.com/photo-1522071820081-009f0129c71c?auto=format&fit=crop&q=80&w=1600")
 
 with tabs[2]:
-    st.header("📸 Photo Manager")
-    custom_hero = st.text_input("Main Hero Image URL")
-    custom_feat = st.text_input("Feature Image URL")
-    custom_gall = st.text_input("Gallery Image URL")
+    st.info("⚡ Power your inventory with a Google Sheet")
+    sheet_url = st.text_input("Google Sheet CSV Link", placeholder="https://docs.google.com/spreadsheets/d/e/.../pub?output=csv")
+    custom_feat = st.text_input("Default Product Image URL (Fallback)", "https://images.unsplash.com/photo-1556761175-5973dc0f32e7?auto=format&fit=crop&q=80&w=800")
+    st.caption("Required Columns: Name, Price, Description, ImageURL")
 
 with tabs[3]:
-    st.header("⚡ Live Data Feed")
-    sheet_url = st.text_input("Published CSV Link")
-
-with tabs[4]:
-    testi_txt = st.text_area("Testimonials (Name | Quote)")
-    faq_txt = st.text_area("FAQ (Question? ? Answer)")
-
-with tabs[5]:
-    st.header("⚖️ Legal Compliance")
-    priv_txt = st.text_area("Privacy Policy Content", height=300)
-    terms_txt = st.text_area("Terms Content", height=300)
-
-# --- 3. THE PLATINUM ENGINE CORE ---
-
-if st.button("🚀 DEPLOY FLAWLESS ENTERPRISE ASSET"):
+    st.subheader("Trust & Legal")
+    testi_data = st.text_area("Testimonials (Name | Quote)", "TechDaily | A game changer for our ops.\nCEO, Acme | Highly recommended.", height=100)
+    faq_data = st.text_area("FAQ (Q? ? A)", "Is this secure? ? Yes, 100% encrypted.\nCan I cancel? ? Anytime.", height=100)
     
-    # 3.1 Setup Image Variables
-    img_h = custom_hero if custom_hero else "https://images.unsplash.com/photo-1519741497674-611481863552?auto=format&fit=crop&q=80&w=1600"
-    img_f = custom_feat if custom_feat else "https://images.unsplash.com/photo-1511795409834-ef04bbd61622?auto=format&fit=crop&q=80&w=800"
-    img_g = custom_gall if custom_gall else "https://images.unsplash.com/photo-1532712938310-34cb3982ef74?auto=format&fit=crop&q=80&w=1600"
+    l1, l2 = st.columns(2)
+    priv_txt = l1.text_area("Privacy Policy Text", "We respect your data...", height=150)
+    term_txt = l2.text_area("Terms of Service Text", "By using this site...", height=150)
 
-    # 3.2 Global Logic Variables
-    logo_display = f'<img src="{biz_logo}" alt="{biz_name}" class="h-10 md:h-16 w-auto object-contain mx-auto md:mx-0">' if biz_logo else f'<span class="text-xl md:text-3xl font-black tracking-tighter uppercase" style="color:var(--p)">{biz_name}</span>'
-    a_list = [a.strip() for a in biz_areas.split(",")]
-    s_areas_json = json.dumps(a_list)
-    wa_c = biz_phone.replace(" ", "").replace("+", "")
-    wa_final_url = f"https://wa.me/{wa_c}?text=Hello%20{biz_name.replace(' ', '%20')},%20interested%20in%20your%20services."
+# --- 5. COMPILER ENGINE ---
 
-    # 3.3 The CSS Theme
-    theme_css = f"""
-    :root {{ --p: {p_color}; --s: {s_color}; --radius: {border_rad}; }}
-    * {{ box-sizing: border-box; }}
-    html, body {{ margin: 0; padding: 0; width: 100%; overflow-x: hidden; position: relative; scroll-behavior: smooth; }}
-    body {{ font-family: '{b_font}', sans-serif; color: #0f172a; line-height: 1.7; background: #fff; }}
-    h1, h2, h3 {{ font-family: '{h_font}', sans-serif; font-weight: {h_weight}; letter-spacing: {ls}; text-transform: uppercase; line-height: 1.1; overflow-wrap: break-word; word-break: break-word; }}
+def get_theme_css():
+    # Base Defaults
+    bg_color = "#ffffff"
+    text_color = "#0f172a"
+    card_bg = "#ffffff"
+    glass_nav = "rgba(255, 255, 255, 0.95)"
     
-    .hero-title {{ font-size: clamp(1.5rem, 8vw, 95px); text-shadow: 0 4px 20px rgba(0,0,0,0.4); line-height: 1; }}
-    .section-title {{ font-size: clamp(1.8rem, 6vw, 75px); color: var(--p); }}
+    # Theme Logic
+    if "Midnight" in theme_mode:
+        bg_color, text_color, card_bg, glass_nav = "#0f172a", "#f8fafc", "#1e293b", "rgba(15, 23, 42, 0.9)"
+    elif "Cyberpunk" in theme_mode:
+        bg_color, text_color, card_bg, glass_nav = "#050505", "#00ff9d", "#111", "rgba(0,0,0,0.8)"
+    elif "Luxury" in theme_mode:
+        bg_color, text_color, card_bg, glass_nav = "#1c1c1c", "#D4AF37", "#2a2a2a", "rgba(28,28,28,0.95)"
+    elif "Forest" in theme_mode:
+        bg_color, text_color, card_bg, glass_nav = "#f1f8e9", "#1b5e20", "#ffffff", "rgba(241,248,233,0.9)"
+    elif "Ocean" in theme_mode:
+        bg_color, text_color, card_bg, glass_nav = "#e0f7fa", "#006064", "#ffffff", "rgba(224,247,250,0.9)"
+    elif "Stark" in theme_mode:
+        bg_color, text_color, card_bg, glass_nav = "#ffffff", "#000000", "#ffffff", "rgba(255,255,255,1)"
+
+    anim_css = ""
+    if anim_type == "Fade Up":
+        anim_css = ".reveal { opacity: 0; transform: translateY(30px); transition: all 0.8s ease-out; } .reveal.active { opacity: 1; transform: translateY(0); }"
+    elif anim_type == "Zoom In":
+        anim_css = ".reveal { opacity: 0; transform: scale(0.95); transition: all 0.8s cubic-bezier(0.175, 0.885, 0.32, 1.275); } .reveal.active { opacity: 1; transform: scale(1); }"
     
-    .btn-supreme {{ background: var(--s); color: white; padding: 1.1rem 2.8rem; border-radius: var(--radius); font-weight: 900; transition: all 0.4s; display: inline-block; text-align: center; border:none; box-shadow: 0 10px 20px -5px var(--s); cursor: pointer; text-decoration:none; }}
-    .btn-supreme:hover {{ transform: translateY(-3px); filter: brightness(1.1); box-shadow: 0 20px 40px -5px var(--s); }}
-    
-    .glass-nav {{ background: rgba(255, 255, 255, 0.98); backdrop-filter: blur(15px); border-bottom: 1px solid rgba(0,0,0,0.05); width: 100%; z-index: 9999; position: fixed; top: 0; left: 0; }}
-    
-    /* RECTIFIED HERO - NO OVERLAP, NO WHITE GAP */
-    .hero-mask {{ 
-        background: linear-gradient(rgba(0,0,0,0.7), rgba(0,0,0,0.5)), url('{img_h}'); 
-        background-size: cover; background-position: center; 
-        min-height: 85vh; display: flex; align-items: center; justify-content: center; 
-        width: 100%; margin: 0; padding: 140px 20px 60px 20px;
+    # FIX: CSS for Hero Image to ensure quotes are handled
+    hero_bg_css = f"background: linear-gradient(rgba(0,0,0,0.6), rgba(0,0,0,0.4)), url('{hero_img}');" if hero_img else "background: var(--p);"
+
+    return f"""
+    :root {{
+        --p: {p_color}; --s: {s_color}; --bg: {bg_color}; --txt: {text_color}; --card: {card_bg};
+        --radius: {border_rad}; --nav: {glass_nav};
+        --h-font: '{h_font}', sans-serif; --b-font: '{b_font}', sans-serif;
     }}
+    * {{ box-sizing: border-box; }}
+    html {{ scroll-behavior: smooth; }}
+    body {{ background-color: var(--bg); color: var(--txt); font-family: var(--b-font); margin: 0; line-height: 1.6; overflow-x: hidden; }}
+    h1, h2, h3, h4 {{ font-family: var(--h-font); color: var(--p); line-height: 1.1; margin-bottom: 1rem; }}
     
-    .product-card {{ background: white; border-radius: var(--radius); padding: 2rem; border: 1px solid #f1f5f9; box-shadow: 0 20px 25px -5px rgba(0,0,0,0.05); transition: 0.3s; cursor: pointer; }}
-    #modal {{ display: none; position: fixed; inset: 0; background: rgba(0,0,0,0.95); z-index: 100000; padding: 1rem; align-items: center; justify-content: center; overflow-y: auto; }}
-    .modal-content {{ background: white; max-width: 1000px; width: 100%; border-radius: var(--radius); overflow: hidden; position: relative; }}
-    .legal-text {{ white-space: pre-wrap; word-wrap: break-word; font-size: 1.1rem; color: #334155; line-height: 1.9; padding: 20px 0; }}
-    .legal-bold-title {{ font-weight: 900; font-size: clamp(2.2rem, 6vw, 4.5rem); color: var(--p); margin-bottom: 2rem; text-transform: uppercase; line-height: 1; }}
-    .wa-float {{ position: fixed; bottom: 30px; right: 30px; background: #25d366; color: white; width: 60px; height: 60px; border-radius: 50px; display: flex; align-items: center; justify-content: center; z-index: 99999; box-shadow: 0 10px 20px rgba(0,0,0,0.2); transition: 0.3s ease; text-decoration:none; }}
+    .container {{ max-width: 1280px; margin: 0 auto; padding: 0 20px; }}
+    .btn {{ display: inline-block; padding: 1rem 2.5rem; border-radius: var(--radius); font-weight: 700; text-decoration: none; transition: 0.3s; text-transform: uppercase; letter-spacing: 0.5px; cursor: pointer; border: none; text-align: center; }}
+    .btn-primary {{ background: var(--p); color: white; }}
+    .btn-accent {{ background: var(--s); color: white; box-shadow: 0 10px 25px -5px var(--s); }}
+    .btn:hover {{ transform: translateY(-3px); filter: brightness(1.15); }}
+    
+    nav {{ position: fixed; top: 0; width: 100%; z-index: 1000; background: var(--nav); backdrop-filter: blur(12px); border-bottom: 1px solid rgba(100,100,100,0.1); padding: 1rem 0; }}
+    .nav-flex {{ display: flex; justify-content: space-between; align-items: center; }}
+    .nav-links a {{ margin-left: 2rem; text-decoration: none; font-weight: 600; color: var(--txt); font-size: 0.9rem; opacity: 0.8; transition:0.2s; }}
+    .nav-links a:hover {{ opacity: 1; color: var(--s); }}
+    
+    .hero {{ min-height: 90vh; display: flex; align-items: center; justify-content: center; text-align: center; {hero_bg_css} background-size: cover; background-position: center; color: white; padding-top: 80px; }}
+    .hero h1 {{ color: white; font-size: clamp(2.5rem, 8vw, 5rem); margin-bottom: 1.5rem; }}
+    .hero p {{ color: rgba(255,255,255,0.9); font-size: clamp(1.1rem, 2vw, 1.5rem); max-width: 700px; margin: 0 auto 2.5rem auto; }}
+    
+    section {{ padding: 5rem 0; }}
+    .section-head {{ text-align: center; margin-bottom: 4rem; }}
+    .section-head h2 {{ font-size: 2.5rem; }}
+    
+    .grid-3 {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 2rem; }}
+    .card {{ background: var(--card); padding: 2rem; border-radius: var(--radius); border: 1px solid rgba(100,100,100,0.1); transition: 0.3s; height: 100%; display: flex; flex-direction: column; }}
+    .card:hover {{ transform: translateY(-5px); box-shadow: 0 20px 40px -10px rgba(0,0,0,0.1); border-color: var(--s); }}
+    
+    .prod-img {{ width: 100%; height: 250px; object-fit: cover; border-radius: calc(var(--radius) - 4px); margin-bottom: 1.5rem; background: #f1f5f9; }}
+    
+    /* Footer Logic */
+    footer {{ background: var(--p); color: white; padding: 4rem 0; margin-top: auto; }}
+    .footer-grid {{ display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 3rem; }}
+    .footer a, footer a {{ color: rgba(255,255,255,0.8) !important; text-decoration: none; display: block; margin-bottom: 0.5rem; transition: 0.3s; }}
+    .footer a:hover, footer a:hover {{ color: #ffffff !important; text-decoration: underline; }}
+    
+    /* Product Detail Specifics */
+    .detail-view {{ display: grid; grid-template-columns: 1fr 1fr; gap: 4rem; align-items: start; }}
+    @media(max-width: 768px) {{ .detail-view {{ grid-template-columns: 1fr; }} }}
+
+    {anim_css}
+    
+    @media (max-width: 768px) {{
+        .nav-links {{ display: none; }}
+        .hero {{ min-height: 70vh; }}
+    }}
     """
 
-    def get_layout(title_tag, desc_tag, body_html, is_home=False):
-        v_tag = f'<meta name="google-site-verification" content="{gsc_tag}">' if (is_home and gsc_tag) else ""
-        
-        dyn_script = ""
-        if is_home and sheet_url:
-            dyn_script = f"""
-            <script>
-            let currentProducts = [];
-            async function fetchLiveData() {{
-                try {{
-                    const response = await fetch('{sheet_url}');
-                    const csv = await response.text();
-                    if (csv.trim().startsWith("<!DOCTYPE") || csv.trim().startsWith("<html")) {{
-                        document.getElementById('live-data-container').innerHTML = "<div class='col-span-full p-20 text-center bg-red-50 text-red-600 rounded-3xl font-bold uppercase'>Data Source Error: Please use CSV link.</div>";
-                        return;
-                    }}
-                    const rows = csv.split('\\n').map(row => row.split(',')).slice(1);
-                    const container = document.getElementById('live-data-container');
-                    container.innerHTML = "";
-                    rows.forEach((parts, idx) => {{
-                        if (parts.length >= 2) {{
-                            const p = {{ id: idx, name: parts[0].replace(/"/g, "").trim(), price: parts[1].replace(/"/g, "").trim(), desc: (parts[2] || "").replace(/"/g, "").trim(), img1: (parts[3] || "{img_f}").trim() }};
-                            currentProducts.push(p);
-                            container.innerHTML += `
-                            <div onclick="openProduct(${{idx}})" class="product-card flex flex-col justify-between transition-all hover:scale-[1.03]">
-                                <img src="${{p.img1}}" class="w-full h-48 object-cover mb-6 rounded-[2rem] bg-slate-50" onerror="this.src='{img_f}'">
-                                <div>
-                                    <h3 class="text-xl font-black mb-2 uppercase" style="color:var(--p)">${{p.name}}</h3>
-                                    <p class="font-black text-2xl mb-4" style="color:var(--s)">${{p.price}}</p>
-                                    <p class="text-slate-400 text-[10px] font-black uppercase tracking-widest italic">Learn More →</p>
-                                </div>
-                            </div>`;
-                        }}
-                    }});
-                }} catch (e) {{ console.log("Fail"); }}
-            }}
-            function openProduct(id) {{
-                const p = currentProducts[id];
-                document.getElementById('m-title').innerText = p.name;
-                document.getElementById('m-price').innerText = p.price;
-                document.getElementById('m-desc').innerText = p.desc;
-                document.getElementById('m-img-1').src = p.img1;
-                document.getElementById('m-wa').href = "https://wa.me/{wa_c}?text=" + encodeURIComponent("Interest in " + p.name);
-                document.getElementById('modal').style.display = 'flex';
-                document.body.style.overflow = 'hidden';
-            }}
-            window.onload = fetchLiveData;
-            </script>
-            """
+def gen_nav():
+    logo_display = f'<img src="{logo_url}" height="40">' if logo_url else f'<span style="font-weight:900; font-size:1.5rem; color:var(--p)">{biz_name}</span>'
+    return f"""
+    <nav><div class="container nav-flex">
+        <a href="index.html" style="text-decoration:none">{logo_display}</a>
+        <div class="nav-links">
+            <a href="index.html">Home</a>
+            {'<a href="index.html#features">Features</a>' if show_features else ''}
+            {'<a href="index.html#inventory">Products</a>' if show_inventory else ''}
+            <a href="about.html">About</a>
+            <a href="contact.html">Contact</a>
+            <a href="tel:{biz_phone}" class="btn-accent" style="padding:0.6rem 1.5rem; margin-left:1.5rem; border-radius:50px; color:white !important;">Call Now</a>
+        </div>
+    </div></nav>
+    """
 
-        return f"""<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
-    {v_tag}
-    <title>{title_tag} | {biz_name}</title>
-    <meta name="description" content="{desc_tag}"><meta name="keywords" content="{biz_key}">
-    <link rel="canonical" href="{prod_url}">
-    <script src="https://cdn.tailwindcss.com"></script>
-    <link href="https://fonts.googleapis.com/css2?family={h_font.replace(' ', '+')}:wght@700;900&family={b_font.replace(' ', '+')}:wght@400;700&display=swap" rel="stylesheet">
-    <style>{theme_css}</style>
-    <script type="application/ld+json">
-    {{ "@context": "https://schema.org", "@type": "LocalBusiness", "name": "{biz_name}", "address": {{ "@type": "PostalAddress", "streetAddress": "{biz_addr}" }}, "telephone": "{biz_phone}", "areaServed": {s_areas_json} }}
+def gen_hero():
+    return f"""
+    <section class="hero"><div class="container reveal">
+        <h1>{hero_h}</h1>
+        <p>{hero_sub}</p>
+        <div style="display:flex; gap:1rem; justify-content:center; flex-wrap:wrap;">
+            <a href="#inventory" class="btn btn-accent">Explore Now</a>
+            <a href="contact.html" class="btn" style="background:rgba(255,255,255,0.2); backdrop-filter:blur(10px); color:white;">Contact Us</a>
+        </div>
+    </div></section>
+    """
+
+def gen_features():
+    cards = ""
+    for line in feat_data.split('\n'):
+        if "|" in line:
+            title, desc = line.split('|')
+            cards += f"""
+            <div class="card reveal">
+                <h3 style="color:var(--s); font-size:1.2rem; text-transform:uppercase; letter-spacing:1px;">{title.strip()}</h3>
+                <p style="opacity:0.8;">{desc.strip()}</p>
+            </div>"""
+    return f"""
+    <section id="features"><div class="container">
+        <div class="section-head reveal"><h2>{f_title}</h2></div>
+        <div class="grid-3">{cards}</div>
+    </div></section>
+    """
+
+# --- INVENTORY LOGIC (Updated for Product Detail Page) ---
+def gen_inventory_js():
+    return f"""
+    <script>
+    // CSV Parser
+    function parseCSVLine(str) {{
+        const res = [];
+        let cur = '';
+        let inQuote = false;
+        for (let i = 0; i < str.length; i++) {{
+            const c = str[i];
+            if (c === '"') {{
+                if (inQuote && str[i+1] === '"') {{ cur += '"'; i++; }}
+                else {{ inQuote = !inQuote; }}
+            }} else if (c === ',' && !inQuote) {{
+                res.push(cur.trim()); cur = '';
+            }} else {{ cur += c; }}
+        }}
+        res.push(cur.trim());
+        return res;
+    }}
+
+    // Homepage Inventory Loader
+    async function loadInv() {{
+        try {{
+            const res = await fetch('{sheet_url}');
+            const txt = await res.text();
+            const lines = txt.split(/\\r\\n|\\n/);
+            const box = document.getElementById('inv-grid');
+            if(!box) return;
+            box.innerHTML = '';
+            
+            for(let i=1; i<lines.length; i++) {{
+                if(!lines[i].trim()) continue;
+                const clean = parseCSVLine(lines[i]);
+                
+                // Fallback image logic
+                let img = clean[3] && clean[3].length > 5 ? clean[3] : '{custom_feat}'; 
+                if(clean[6] && clean[6].length > 5) img = clean[6];
+
+                // Create Product Card with Link to Detail Page
+                if(clean.length > 1) {{
+                    const prodName = encodeURIComponent(clean[0]);
+                    box.innerHTML += `
+                    <div class="card reveal">
+                        <img src="${{img}}" class="prod-img" onerror="this.src='{custom_feat}'">
+                        <div style="flex-grow:1; display:flex; flex-direction:column; justify-content:space-between;">
+                            <div>
+                                <h3>${{clean[0]}}</h3>
+                                <p style="font-weight:bold; color:var(--s); font-size:1.1rem;">${{clean[1]}}</p>
+                                <p style="font-size:0.9rem; opacity:0.7; margin-bottom:1rem;">${{clean[2] ? clean[2].substring(0,60)+'...' : ''}}</p>
+                            </div>
+                            <div style="display:grid; grid-template-columns:1fr 1fr; gap:0.5rem;">
+                                <a href="product.html?item=${{prodName}}" class="btn" style="background:#e2e8f0; color:var(--primary); padding:0.8rem; font-size:0.8rem;">View Details</a>
+                                <a href="https://wa.me/{wa_num}?text=I am interested in ${{prodName}}" target="_blank" class="btn-primary btn" style="padding:0.8rem; font-size:0.8rem;">WhatsApp</a>
+                            </div>
+                        </div>
+                    </div>`;
+                }}
+            }}
+        }} catch(e) {{ console.log(e); }}
+    }}
+    if(document.getElementById('inv-grid')) window.addEventListener('load', loadInv);
     </script>
-</head>
-<body class="bg-white">
-    <nav class="glass-nav p-4 md:p-6 shadow-sm">
-        <div class="max-w-[1440px] mx-auto flex flex-col md:flex-row justify-between items-center gap-4">
-            <a href="index.html">{logo_display}</a>
-            <div class="flex items-center space-x-6 md:space-x-12 text-[10px] md:text-xs font-black uppercase tracking-widest text-slate-600">
-                <a href="index.html" class="hover:text-blue-600">Home</a> <a href="about.html">About</a> <a href="contact.html">Contact</a>
-                <a href="tel:{biz_phone}" class="bg-slate-900 text-white px-5 py-2 rounded-full font-bold shadow-lg">Call</a>
-            </div>
-        </div>
-    </nav>
-    <main class="flex-grow pt-24 md:pt-0">{body_html}</main>
-    
-    <div id="modal" onclick="if(event.target == this) {{ this.style.display='none'; document.body.style.overflow='auto'; }}">
-        <div class="modal-content shadow-2xl animate-in zoom-in duration-300">
-            <div class="grid md:grid-cols-2">
-                <div class="p-6 bg-slate-50 flex flex-col gap-4">
-                    <img id="m-img-1" class="w-full h-80 object-cover rounded-[2.5rem] shadow-xl">
-                </div>
-                <div class="p-12 flex flex-col justify-center text-left">
-                    <h2 id="m-title" class="text-4xl font-black mb-4 uppercase text-p" style="color:var(--p)"></h2>
-                    <p id="m-price" class="text-3xl font-black mb-8 text-s" style="color:var(--s)"></p>
-                    <p id="m-desc" class="text-slate-600 mb-12 leading-relaxed text-lg"></p>
-                    <a id="m-wa" href="#" target="_blank" class="btn-supreme w-full uppercase tracking-widest shadow-2xl">Confirm Booking</a>
-                    <button onclick="document.getElementById('modal').style.display='none'; document.body.style.overflow='auto';" class="text-xs font-black uppercase tracking-widest opacity-30 mt-8 underline">Close</button>
-                </div>
-            </div>
-        </div>
-    </div>
-
-    <a href="https://wa.me/{wa_c}" class="wa-float" target="_blank"><svg style="width:38px;height:38px" viewBox="0 0 24 24"><path fill="currentColor" d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21c5.46 0 9.91-4.45 9.91-9.91c0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2m.01 1.67c2.2 0 4.26.86 5.82 2.42a8.225 8.225 0 0 1 2.41 5.83c0 4.54-3.7 8.23-8.24 8.23c-1.48 0-2.93-.39-4.19-1.15l-.3-.17l-3.12.82l.83-3.04l-.2-.32a8.188 8.188 0 0 1-1.26-4.38c.01-4.54 3.7-8.24 8.25-8.24m-3.53 3.16c-.13 0-.35.05-.54.26c-.19.2-.72.7-.72 1.72s.73 2.01.83 2.14c.1.13 1.44 2.19 3.48 3.07c.49.21.87.33 1.16.43c.49.16.94.13 1.29.08c.4-.06 1.21-.5 1.38-.98c.17-.48.17-.89.12-.98c-.05-.09-.18-.13-.37-.23c-.19-.1-.1.13-.1.13s-1.13-.56-1.32-.66c-.19-.1-.32-.15-.45.05c-.13.2-.51.65-.62.78c-.11.13-.23.15-.42.05c-.19-.1-.8-.3-1.53-.94c-.57-.5-1.02-1.12-1.21-1.45c-.11-.19-.01-.29.09-.38c.09-.08.19-.23.29-.34c.1-.11.13-.19.19-.32c.06-.13.03-.24-.01-.34c-.05-.1-.45-1.08-.62-1.48c-.16-.4-.36-.34-.51-.35c-.11-.01-.25-.01-.4-.01Z"/></svg></a>
-
-    <footer class="bg-slate-950 text-slate-400 py-24 px-10 border-t border-slate-900">
-        <div class="max-w-[1440px] mx-auto grid md:grid-cols-4 gap-16 text-left">
-            <div class="col-span-2">
-                <h4 class="text-white text-3xl font-black mb-8 uppercase tracking-tighter uppercase">{biz_name}</h4>
-                <p class="text-sm leading-relaxed mb-10 max-w-md">{biz_addr}</p>
-                <div class="bg-slate-900/50 p-6 border border-slate-800 rounded-3xl">
-                    <h5 class="text-white text-[10px] font-black uppercase tracking-widest mb-4 opacity-50">Verified Coverage</h5>
-                    <div class="flex flex-wrap gap-2">{"".join([f'<span class="bg-slate-800 text-[10px] px-3 py-1 rounded-full uppercase font-bold text-white border border-slate-700">{a}</span>' for a in a_list])}</div>
-                </div>
-                <p class="text-[10px] mt-10 opacity-30 uppercase font-black tracking-widest italic tracking-widest underline decoration-white underline-offset-8 decoration-2 text-white">Architected By Kaydiem Script Lab</p>
-            </div>
-            <div><h4 class="text-white font-bold mb-8 uppercase text-xs">Technical Hub</h4><ul class="space-y-4 text-sm font-bold uppercase list-none p-0"><li><a href="privacy.html" class="hover:text-white transition no-underline">Privacy</a></li><li><a href="terms.html" class="hover:text-white transition no-underline">Terms</a></li></ul></div>
-            <div><h4 class="text-white font-bold mb-8 uppercase text-xs text-brand" style="color:var(--s)">Direct Connect</h4><p class="text-lg font-bold text-white leading-loose">{biz_phone}<br>{biz_email}</p></div>
-        </div>
-    </footer>
-    {dyn_script}
-</body></html>"""
-
-    # --- CONTENT CONSTRUCTORS ---
-    serv_html = "".join([f'<div class="bg-slate-50 p-12 rounded-[2.5rem] border border-slate-100 shadow-xl hover:scale-[1.02] transition-transform"><h3 class="text-2xl font-black mb-4 uppercase" style="color:var(--p)">{s.strip()}</h3><p class="text-slate-500 text-sm leading-relaxed font-bold uppercase tracking-tight italic text-left">Premium technical solution for {biz_name}.</p></div>' for s in biz_serv.splitlines() if s.strip()])
-    
-    t_cards = ""
-    for t in testi_txt.splitlines():
-        if "|" in t:
-            parts = t.split("|")
-            t_cards += f'<div class="p-10 bg-slate-50 rounded-[3rem] border border-slate-100 italic text-xl shadow-inner mb-8">"{parts[1].strip()}"<br><span class="font-black not-italic text-sm block mt-6 uppercase tracking-widest text-brand" style="color:var(--p)">— {parts[0].strip()} <span class="text-emerald-500 font-black ml-2">● Partner</span></span></div>'
-
-    f_cards = ""
-    for f in faq_txt.splitlines():
-        if "?" in f:
-            parts = f.rsplit("?", 1)
-            if len(parts) > 1:
-                q = parts[0].strip() + "?"
-                a = parts[1].strip()
-                if a.startswith("?"): a = a[1:].strip()
-                f_cards += f'<details class="mb-6 bg-white p-6 rounded-2xl border border-slate-100 cursor-pointer shadow-sm"><summary class="font-black text-lg uppercase tracking-tight">{q}</summary><p class="mt-4 text-slate-600 leading-relaxed font-medium">{a}</p></details>'
-
-    d_section = f"""<section class="py-32 px-6 max-w-[1440px] mx-auto text-center border-b"><h2 class="section-title mb-20 uppercase tracking-tighter" style="color:var(--p)">Verified Packages</h2><div id="live-data-container" class="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-4 gap-10 text-left"><p class="p-20 text-center text-slate-400 font-bold animate-pulse uppercase tracking-widest">Connecting to Data Hub...</p></div></section>""" if sheet_url else ""
-
-    idx_content = f"""
-    <section class="hero-mask px-6 text-center text-white">
-        <div class="max-w-[1200px] mx-auto">
-            <h1 class="hero-title mb-10 uppercase tracking-tighter leading-none">{hero_h}</h1>
-            <p class="text-lg md:text-3xl font-light mb-16 max-w-4xl mx-auto opacity-90 leading-tight">{seo_d}</p>
-            <a href="tel:{biz_phone}" class="btn-supreme uppercase tracking-[0.4em] text-[10px] md:text-sm shadow-2xl" style="background:var(--p)">Consult an Expert</a>
-        </div>
-    </section>
-    <section class="max-w-[1440px] mx-auto py-24 px-6 text-center border-b">
-        <h2 class="section-title mb-20 uppercase tracking-tighter" style="color:var(--p)">Core Competencies</h2>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-10 text-left">{serv_html}</div>
-    </section>
-    {d_section}
-    <section class="bg-slate-50 py-32 px-6 border-y text-left">
-        <div class="max-w-[1440px] mx-auto grid md:grid-cols-2 gap-24 items-center">
-            <img src="{img_f}" class="shadow-2xl" style="border-radius: var(--radius)">
-            <div>
-                <h2 class="text-5xl font-black mb-12 uppercase tracking-tighter leading-none" style="color:var(--p)">Verified Heritage</h2>
-                <p class="text-2xl text-slate-600 mb-12 leading-relaxed italic">"Supplying the engineering foundation for the 2026 city landscape. Precision execution, certified safety, and direct quality oversight."</p>
-                <a href="about.html" class="btn-supreme text-xs tracking-widest uppercase">Our Story</a>
-            </div>
-        </div>
-    </section>
-    <section class="py-32 px-6 max-w-7xl mx-auto text-center"><div class="grid md:grid-cols-2 gap-24 text-left"><div><h2 class="text-4xl font-black mb-16 uppercase tracking-tighter" style="color:var(--p)">Success</h2>{t_cards}</div><div><h2 class="text-4xl font-black mb-16 uppercase tracking-tighter" style="color:var(--p)">Expert Insights</h2>{f_cards}</div></div></section>
     """
 
-    # --- ZIP OUTPUT ---
-    z_b = io.BytesIO()
-    with zipfile.ZipFile(z_b, "a", zipfile.ZIP_DEFLATED, False) as z_f:
-        z_f.writestr("index.html", get_layout("Home", seo_d, idx_content, True))
-        z_f.writestr("about.html", get_layout("About", "History", f"<section class='max-w-7xl mx-auto py-40 px-6'><h1 class='legal-bold-title uppercase'>About Our Heritage</h1><div class='text-xl md:text-2xl leading-relaxed text-slate-700 legal-text'>{about_txt}</div><img src='{img_g}' class='mt-20 w-full h-[600px] object-cover shadow-2xl' style='border-radius: var(--radius)'></section>"))
-        z_f.writestr("contact.html", get_layout("Contact", "Location", f"<section class='max-w-[1440px] mx-auto py-24 px-6 text-center'><h1 class='legal-bold-title uppercase tracking-tighter'>Technical Hub</h1><div class='grid md:grid-cols-2 gap-16 text-left'><div class='bg-slate-950 p-12 md:p-24 text-white' style='border-radius: var(--radius)'><p class='text-4xl font-black mb-8 text-white'>{biz_phone}</p><p class='text-2xl mb-12 opacity-80'>{biz_addr}</p></div><div class='rounded-[3rem] overflow-hidden border shadow-2xl bg-slate-100' style='min-height:300px'>{map_iframe}</div></div></section>"))
-        z_f.writestr("privacy.html", get_layout("Privacy", "Legal", f"<div class='max-w-4xl mx-auto py-40 px-6'><h1 class='legal-bold-title uppercase'>Privacy Policy</h1><div class='text-lg legal-text'>{priv_txt}</div></div>"))
-        z_f.writestr("terms.html", get_layout("Terms", "Legal", f"<div class='max-w-4xl mx-auto py-40 px-6'><h1 class='legal-bold-title uppercase'>Terms & Conditions</h1><div class='text-lg legal-text'>{terms_txt}</div></div>"))
-        z_f.writestr("404.html", get_layout("404", "Not Found", "<div class='py-64 text-center'><h1 class='text-[120px] font-black uppercase text-slate-200 tracking-widest'>404</h1></div>"))
-        z_f.writestr("robots.txt", f"User-agent: *\nAllow: /\nSitemap: {prod_url}sitemap.xml")
-        z_f.writestr("sitemap.xml", f'<?xml version="1.0" encoding="UTF-8"?><urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9"><url><loc>{prod_url}index.html</loc></url><url><loc>{prod_url}about.html</loc></url></urlset>')
+def gen_inventory():
+    if not show_inventory: return ""
+    return f"""
+    <section id="inventory" style="background:rgba(0,0,0,0.02)"><div class="container">
+        <div class="section-head reveal"><h2>Live Inventory</h2><p>Real-time availability directly from our warehouse.</p></div>
+        <div id="inv-grid" class="grid-3"><div style="grid-column:1/-1; text-align:center; padding:4rem; color:var(--s);">Loading Database...</div></div>
+    </div></section>
+    {gen_inventory_js() if sheet_url else ''}
+    """
 
-    st.success("💎 TITAN SUPREME v10.0 DEPLOYED. Fully Audited.")
-    st.download_button("📥 DOWNLOAD PLATINUM PACKAGE", z_b.getvalue(), f"{biz_name.lower().replace(' ', '_')}_v10.zip")
+def gen_about_section():
+    return f"""
+    <section id="about"><div class="container">
+        <div class="grid-3" style="grid-template-columns: 1fr 1fr; align-items:center;">
+            <div class="reveal">
+                <h2 style="font-size:2.5rem; margin-bottom:1.5rem;">{about_h}</h2>
+                <div style="font-size:1.1rem; opacity:0.8; margin-bottom:2rem;">{about_txt}</div>
+                <div class="grid-3" style="grid-template-columns:1fr 1fr; gap:1rem;">
+                    <div style="padding:1rem; background:rgba(0,0,0,0.03); border-radius:8px;"><strong>50+</strong><br>Projects</div>
+                    <div style="padding:1rem; background:rgba(0,0,0,0.03); border-radius:8px;"><strong>24/7</strong><br>Support</div>
+                </div>
+            </div>
+            <img src="{about_img}" class="reveal" style="width:100%; border-radius:var(--radius); box-shadow:0 20px 50px -20px rgba(0,0,0,0.2);">
+        </div>
+    </div></section>
+    """
+
+def gen_footer():
+    # FIX: Updated Branding Text
+    return f"""
+    <footer><div class="container">
+        <div class="footer-grid">
+            <div>
+                <h3 style="color:white; margin-bottom:1.5rem;">{biz_name}</h3>
+                <p style="opacity:0.8; font-size:0.9rem;">{biz_addr}</p>
+                <p style="opacity:0.8; font-size:0.9rem; margin-top:1rem;">{biz_email}</p>
+            </div>
+            <div>
+                <h4 style="color:white; font-size:0.9rem; text-transform:uppercase; letter-spacing:1px; margin-bottom:1.5rem;">Explore</h4>
+                <a href="index.html">Home</a>
+                <a href="about.html">About Us</a>
+                <a href="contact.html">Contact</a>
+            </div>
+            <div>
+                <h4 style="color:white; font-size:0.9rem; text-transform:uppercase; letter-spacing:1px; margin-bottom:1.5rem;">Legal</h4>
+                <a href="privacy.html">Privacy Policy</a>
+                <a href="terms.html">Terms of Service</a>
+            </div>
+        </div>
+        <div style="border-top:1px solid rgba(255,255,255,0.1); margin-top:3rem; padding-top:2rem; text-align:center; opacity:0.4; font-size:0.8rem;">
+            &copy; <a href="https://www.kaydiemscriptlab.com/" target="_blank" style="display:inline; color:white;">Kaydiem Script Lab</a>. Powered by Titan Engine.
+        </div>
+    </div></footer>
+    """
+
+def gen_wa_widget():
+    if not wa_num: return ""
+    return f"""<a href="https://wa.me/{wa_num}" class="wa-float" target="_blank" style="position:fixed; bottom:30px; right:30px; background:#25d366; color:white; width:60px; height:60px; border-radius:50%; display:flex; align-items:center; justify-content:center; box-shadow:0 10px 30px rgba(37,211,102,0.4); z-index:9999;"><svg style="width:32px;height:32px" viewBox="0 0 24 24"><path fill="currentColor" d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21c5.46 0 9.91-4.45 9.91-9.91c0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2m.01 1.67c2.2 0 4.26.86 5.82 2.42a8.225 8.225 0 0 1 2.41 5.83c0 4.54-3.7 8.23-8.24 8.23c-1.48 0-2.93-.39-4.19-1.15l-.3-.17l-3.12.82l.83-3.04l-.2-.32a8.188 8.188 0 0 1-1.26-4.38c.01-4.54 3.7-8.24 8.25-8.24m-3.53 3.16c-.13 0-.35.05-.54.26c-.19.2-.72.7-.72 1.72s.73 2.01.83 2.14c.1.13 1.44 2.19 3.48 3.07c.49.21.87.33 1.16.43c.49.16.94.13 1.29.08c.4-.06 1.21-.5 1.38-.98c.17-.48.17-.89.12-.98c-.05-.09-.18-.13-.37-.23c-.19-.1-.1.13-.1.13s-1.13-.56-1.32-.66c-.19-.1-.32-.15-.45.05c-.13.2-.51.65-.62.78c-.11.13-.23.15-.42.05c-.19-.1-.8-.3-1.53-.94c-.57-.5-1.02-1.12-1.21-1.45c-.11-.19-.01-.29.09-.38c.09-.08.19-.23.29-.34c.1-.11.13-.19.19-.32c.06-.13.03-.24-.01-.34c-.05-.1-.45-1.08-.62-1.48c-.16-.4-.36-.34-.51-.35c-.11-.01-.25-.01-.4-.01Z"/></svg></a>"""
+
+def gen_scripts():
+    return """
+    <script>
+    window.addEventListener('scroll', () => {
+        var reveals = document.querySelectorAll('.reveal');
+        for (var i = 0; i < reveals.length; i++) {
+            var windowHeight = window.innerHeight;
+            var elementTop = reveals[i].getBoundingClientRect().top;
+            var elementVisible = 150;
+            if (elementTop < windowHeight - elementVisible) { reveals[i].classList.add('active'); }
+        }
+    });
+    window.dispatchEvent(new Event('scroll'));
+    </script>
+    """
+
+def build_page(title, content, extra_js=""):
+    css = get_theme_css()
+    meta_tags = f'<meta name="description" content="{seo_d}">'
+    if gsc_tag: meta_tags += f'\n<meta name="google-site-verification" content="{gsc_tag}">'
+    if og_image: meta_tags += f'\n<meta property="og:image" content="{og_image}">'
+    
+    analytics = ""
+    if ga_tag:
+        analytics = f"""<script async src="https://www.googletagmanager.com/gtag/js?id={ga_tag}"></script>
+        <script>window.dataLayer=window.dataLayer||[];function gtag(){{dataLayer.push(arguments);}}gtag('js',new Date());gtag('config','{ga_tag}');</script>"""
+
+    return f"""
+    <!DOCTYPE html>
+    <html lang="en">
+    <head>
+        <meta charset="UTF-8"><meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <title>{title} | {biz_name}</title>
+        {meta_tags}
+        <link href="https://fonts.googleapis.com/css2?family={h_font.replace(' ', '+')}:wght@400;700;900&family={b_font.replace(' ', '+')}:wght@300;400;600&display=swap" rel="stylesheet">
+        <style>{css}</style>
+        {analytics}
+    </head>
+    <body>
+        {gen_nav()}
+        {content}
+        {gen_footer()}
+        {gen_wa_widget()}
+        {gen_scripts()}
+        {extra_js}
+    </body>
+    </html>
+    """
+
+# --- NEW: GENERATE 404 PAGE ---
+def gen_404_content():
+    return f"""
+    <section class="hero" style="min-height:70vh;">
+        <div class="container">
+            <h1 style="font-size:6rem; margin:0;">404</h1>
+            <p>Page Not Found</p>
+            <br>
+            <a href="index.html" class="btn btn-accent">Return Home</a>
+        </div>
+    </section>
+    """
+
+# --- NEW: DYNAMIC PRODUCT PAGE ---
+def gen_product_page_content():
+    # This page looks at the URL ?item=Name and fetches data
+    return f"""
+    <section style="padding-top:150px;">
+        <div class="container">
+            <div id="product-detail" class="detail-view">
+                <div style="background:#eee; height:400px; border-radius:12px; display:flex; align-items:center; justify-content:center;">Loading...</div>
+                <div>Loading...</div>
+            </div>
+        </div>
+    </section>
+    <script>
+    // Include the CSV Parser again
+    function parseCSVLine(str) {{
+        const res = [];
+        let cur = '';
+        let inQuote = false;
+        for (let i = 0; i < str.length; i++) {{
+            const c = str[i];
+            if (c === '"') {{
+                if (inQuote && str[i+1] === '"') {{ cur += '"'; i++; }}
+                else {{ inQuote = !inQuote; }}
+            }} else if (c === ',' && !inQuote) {{
+                res.push(cur.trim()); cur = '';
+            }} else {{ cur += c; }}
+        }}
+        res.push(cur.trim());
+        return res;
+    }}
+
+    async function loadProduct() {{
+        const params = new URLSearchParams(window.location.search);
+        const targetName = params.get('item');
+        
+        if(!targetName) {{
+            document.getElementById('product-detail').innerHTML = '<h2>Product not found</h2>';
+            return;
+        }}
+
+        try {{
+            const res = await fetch('{sheet_url}');
+            const txt = await res.text();
+            const lines = txt.split(/\\r\\n|\\n/);
+            
+            let found = false;
+            
+            for(let i=1; i<lines.length; i++) {{
+                const clean = parseCSVLine(lines[i]);
+                if(clean.length > 0 && clean[0] === targetName) {{
+                    found = true;
+                    // Fallback image logic
+                    let img = clean[3] && clean[3].length > 5 ? clean[3] : '{custom_feat}'; 
+                    if(clean[6] && clean[6].length > 5) img = clean[6];
+                    
+                    document.getElementById('product-detail').innerHTML = `
+                        <img src="${{img}}" style="width:100%; height:auto; border-radius:12px; box-shadow:0 10px 30px rgba(0,0,0,0.1);">
+                        <div>
+                            <h1 style="font-size:3rem; line-height:1.1;">${{clean[0]}}</h1>
+                            <p style="font-size:1.5rem; color:var(--s); font-weight:bold; margin-bottom:1.5rem;">${{clean[1]}}</p>
+                            <p style="line-height:1.8; opacity:0.8; margin-bottom:2rem;">${{clean[2]}}</p>
+                            <a href="https://wa.me/{wa_num}?text=I am interested in ${{encodeURIComponent(clean[0])}}" target="_blank" class="btn btn-primary">Order on WhatsApp</a>
+                            <br><br>
+                            <a href="index.html#inventory" style="text-decoration:none; color:var(--txt); opacity:0.6;">&larr; Back to Shop</a>
+                        </div>
+                    `;
+                    break;
+                }}
+            }}
+            if(!found) document.getElementById('product-detail').innerHTML = '<h2>Product not found in database.</h2>';
+            
+        }} catch(e) {{ console.log(e); }}
+    }}
+    loadProduct();
+    </script>
+    """
+
+# --- 6. PAGE CONTENT GENERATION ---
+home_content = ""
+if show_hero: home_content += gen_hero()
+if show_stats: home_content += f'<div style="background:var(--p); color:white; padding:3rem 0; text-align:center;"><div class="container grid-3"><div class="reveal"><h3>10+</h3><p>Years</p></div><div class="reveal"><h3>500+</h3><p>Clients</p></div><div class="reveal"><h3>100%</h3><p>Satisfaction</p></div></div></div>'
+if show_features: home_content += gen_features()
+if show_inventory: home_content += gen_inventory()
+if show_gallery: home_content += gen_about_section()
+if show_testimonials: 
+    t_cards = "".join([f'<div class="card reveal" style="text-align:center;"><i>"{x.split("|")[1]}"</i><br><br><b>- {x.split("|")[0]}</b></div>' for x in testi_data.split('\n') if "|" in x])
+    home_content += f'<section style="background:#f8fafc"><div class="container"><div class="section-head reveal"><h2>Client Stories</h2></div><div class="grid-3">{t_cards}</div></div></section>'
+if show_cta: home_content += f'<section style="background:var(--s); color:white; text-align:center;"><div class="container reveal"><h2>Ready to Start?</h2><p style="margin-bottom:2rem;">Let us build your future today.</p><a href="contact.html" class="btn" style="background:white; color:var(--s);">Get a Quote</a></div></section>'
+
+# --- 7. RENDER & DEPLOY ---
+st.divider()
+st.subheader("🚀 Launchpad")
+
+preview_mode = st.radio("Preview Page:", ["Home", "About", "Contact", "Privacy", "Terms", "Product Detail (Demo)"], horizontal=True)
+
+# Generate static contents for other pages
+about_content = f'<section class="hero" style="min-height:50vh;"><div class="container"><h1>About Us</h1></div></section><section><div class="container"><p style="font-size:1.2rem; line-height:1.8;">{about_txt}</p></div></section>'
+contact_content = f'<section class="hero" style="min-height:50vh;"><div class="container"><h1>Contact Us</h1></div></section><section><div class="container" style="text-align:center;"><h2>{biz_phone}</h2><p>{biz_addr}</p><br>{map_iframe}</div></section>'
+privacy_content = f'<section><div class="container legal-text"><h1>Privacy Policy</h1><br>{priv_txt}</div></section>'
+terms_content = f'<section><div class="container legal-text"><h1>Terms of Service</h1><br>{term_txt}</div></section>'
+
+c1, c2 = st.columns([3, 1])
+with c1:
+    if preview_mode == "Home":
+        st.components.v1.html(build_page("Home", home_content), height=600, scrolling=True)
+    elif preview_mode == "About":
+        st.components.v1.html(build_page("About", about_content), height=600, scrolling=True)
+    elif preview_mode == "Contact":
+        st.components.v1.html(build_page("Contact", contact_content), height=600, scrolling=True)
+    elif preview_mode == "Privacy":
+        st.components.v1.html(build_page("Privacy", privacy_content), height=600, scrolling=True)
+    elif preview_mode == "Terms":
+        st.components.v1.html(build_page("Terms", terms_content), height=600, scrolling=True)
+    elif preview_mode == "Product Detail (Demo)":
+        st.warning("Preview only shows layout. Live data requires the downloaded file.")
+        st.components.v1.html(build_page("Product Name", gen_product_page_content()), height=600, scrolling=True)
+
+with c2:
+    st.success("System Ready.")
+    if st.button("DOWNLOAD WEBSITE ZIP", type="primary"):
+        z_b = io.BytesIO()
+        with zipfile.ZipFile(z_b, "a", zipfile.ZIP_DEFLATED, False) as zf:
+            # 1. Main Pages
+            zf.writestr("index.html", build_page("Home", home_content))
+            zf.writestr("about.html", build_page("About", about_content))
+            zf.writestr("contact.html", build_page("Contact", contact_content))
+            zf.writestr("privacy.html", build_page("Privacy Policy", privacy_content))
+            zf.writestr("terms.html", build_page("Terms of Service", terms_content))
+            
+            # 2. Product Detail Page
+            zf.writestr("product.html", build_page("Product Details", gen_product_page_content()))
+
+            # 3. 404 Page
+            zf.writestr("404.html", build_page("404 Not Found", gen_404_content()))
+
+            # 4. Robots.txt
+            robots_txt = f"User-agent: *\nAllow: /\nSitemap: {prod_url}/sitemap.xml"
+            zf.writestr("robots.txt", robots_txt)
+
+            # 5. Sitemap.xml
+            import datetime
+            date_str = datetime.date.today().isoformat()
+            sitemap_xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+   <url><loc>{prod_url}/</loc><lastmod>{date_str}</lastmod></url>
+   <url><loc>{prod_url}/index.html</loc><lastmod>{date_str}</lastmod></url>
+   <url><loc>{prod_url}/about.html</loc><lastmod>{date_str}</lastmod></url>
+   <url><loc>{prod_url}/contact.html</loc><lastmod>{date_str}</lastmod></url>
+   <url><loc>{prod_url}/privacy.html</loc><lastmod>{date_str}</lastmod></url>
+   <url><loc>{prod_url}/terms.html</loc><lastmod>{date_str}</lastmod></url>
+</urlset>"""
+            zf.writestr("sitemap.xml", sitemap_xml)
+            
+        st.download_button("📥 Click to Save", z_b.getvalue(), f"{biz_name.lower().replace(' ','_')}_site.zip", "application/zip")
