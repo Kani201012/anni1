@@ -381,16 +381,49 @@ def gen_hero():
     </div></section>
     """
 
+def get_simple_icon(name):
+    name = name.lower().strip()
+    # Simple SVG mappings for the icons used in the content
+    if "star" in name: return '<svg viewBox="0 0 24 24" width="32" height="32" fill="currentColor"><path d="M12 17.27L18.18 21l-1.64-7.03L22 9.24l-7.19-.61L12 2 9.19 8.63 2 9.24l5.46 4.73L5.82 21z"/></svg>'
+    if "sciss" in name: return '<svg viewBox="0 0 24 24" width="32" height="32" fill="currentColor"><path d="M6 6c0-2.21 1.79-4 4-4s4 1.79 4 4c0 1.25-.58 2.36-1.47 3.09l1.97 1.97C15.35 10.39 16.14 10 17 10c2.21 0 4 1.79 4 4s-1.79 4-4 4-4-1.79-4-4c0-.86.39-1.65 1.06-2.5l-1.97-1.97C11.36 10.42 10.25 11 9 11l-3 8v2H4v-2l3-8C6.35 10.42 6 9.25 6 8zm4-2c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2zm7 8c-1.1 0-2 .9-2 2s.9 2 2 2 2-.9 2-2-.9-2-2-2z"/></svg>'
+    if "heart" in name: return '<svg viewBox="0 0 24 24" width="32" height="32" fill="currentColor"><path d="M12 21.35l-1.45-1.32C5.4 15.36 2 12.28 2 8.5 2 5.42 4.42 3 7.5 3c1.74 0 3.41.81 4.5 2.09C13.09 3.81 14.76 3 16.5 3 19.58 3 22 5.42 22 8.5c0 3.78-3.4 6.86-8.55 11.54L12 21.35z"/></svg>'
+    # Default generic icon
+    return '<svg viewBox="0 0 24 24" width="32" height="32" fill="currentColor"><path d="M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z"/></svg>'
+
+# --- REPLACE YOUR gen_features WITH THIS ---
 def gen_features():
     cards = ""
-    for line in feat_data.split('\n'):
+    # We strip empty lines to prevent errors
+    lines = [x for x in feat_data.split('\n') if x.strip()]
+    
+    for line in lines:
         if "|" in line:
-            title, desc = line.split('|')
-            cards += f"""
-            <div class="card reveal">
-                <h3 style="color:var(--s); font-size:1.2rem; text-transform:uppercase; letter-spacing:1px;">{title.strip()}</h3>
-                <p style="opacity:0.8;">{desc.strip()}</p>
-            </div>"""
+            parts = line.split('|')
+            
+            # Scenario A: User pasted "Icon | Title | Desc" (3 parts)
+            if len(parts) >= 3:
+                icon_code = get_simple_icon(parts[0])
+                title = parts[1].strip()
+                desc = parts[2].strip()
+                
+                cards += f"""
+                <div class="card reveal">
+                    <div style="color:var(--s); margin-bottom:1rem;">{icon_code}</div>
+                    <h3 style="color:var(--p); font-size:1.2rem; text-transform:uppercase; letter-spacing:1px;">{title}</h3>
+                    <p style="opacity:0.8;">{desc}</p>
+                </div>"""
+                
+            # Scenario B: User pasted "Title | Desc" (2 parts)
+            elif len(parts) == 2:
+                title = parts[0].strip()
+                desc = parts[1].strip()
+                
+                cards += f"""
+                <div class="card reveal">
+                    <h3 style="color:var(--s); font-size:1.2rem; text-transform:uppercase; letter-spacing:1px;">{title}</h3>
+                    <p style="opacity:0.8;">{desc}</p>
+                </div>"""
+                
     return f"""
     <section id="features"><div class="container">
         <div class="section-head reveal"><h2>{f_title}</h2></div>
