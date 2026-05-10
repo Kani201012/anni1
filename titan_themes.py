@@ -657,13 +657,23 @@ def generate_modern_css(
         if any(x in theme_name for x in ["Glass", "Mesh"]) else ""
     )
 
-    h_align = "text-align: center; justify-content: center;"
+    # ── Alignment-derived values ─────────────────────────────────────────────
+    # Single source of truth for all hero alignment CSS.
+    # Every hero rule reads from these variables — nothing hardcoded elsewhere.
     if hero_align == "Left":
-        h_align = "text-align: left; justify-content: flex-start; align-items: center;"
-
-    hero_p_margin = (
-        "0 auto 2.5rem auto" if hero_align == "Center" else "0 0 2.5rem 0"
-    )
+        h_align        = "text-align: left; justify-content: flex-start; align-items: center;"
+        h_text_align   = "text-align: left;"
+        h_text_items   = "align-items: flex-start;"
+        h_btn_justify  = "justify-content: flex-start;"
+        hero_p_margin  = "0 0 2.5rem 0"
+        h_badge_margin = "0"
+    else:
+        h_align        = "text-align: center; justify-content: center;"
+        h_text_align   = "text-align: center;"
+        h_text_items   = "align-items: center;"
+        h_btn_justify  = "justify-content: center;"
+        hero_p_margin  = "0 auto 2.5rem auto"
+        h_badge_margin = "0 auto var(--space-md)"
 
     # ── 6. Bento grid + dark mode sub-blocks ─────────────────────────────────
     bento_css   = _bento_grid_css(theme_name, t["radius"])
@@ -1065,29 +1075,46 @@ def generate_modern_css(
     }}
 
     .modern-hero-grid {{
-        display:             grid;
+        display:               grid;
         grid-template-columns: 1.1fr 1fr;
-        gap:                 clamp(2rem, 4vw, 4rem);
-        align-items:         center;
-        width:               100%;
+        gap:                   clamp(2rem, 4vw, 4rem);
+        align-items:           center;
+        width:                 100%;
     }}
 
+    /* Text column — alignment is driven entirely by the hero_align param.
+       This rule is the ONLY place .modern-hero-text alignment is set.
+       The mobile @media override below inherits and does NOT re-hardcode. */
+    .modern-hero-text {{
+        display:        flex;
+        flex-direction: column;
+        {h_text_align}
+        {h_text_items}
+    }}
+
+    /* Badge alignment follows the text column */
     .hero-badge {{
         display:        inline-block;
         padding:        0.4rem 1rem;
         background:     rgba(128,128,128,0.1);
         border:         1px solid rgba(128,128,128,0.2);
         border-radius:  50px;
-        /* Fluid badge label */
         font-size:      clamp(0.75rem, 1vw, 0.9rem);
         font-weight:    700;
+        margin:         {h_badge_margin};
         margin-bottom:  var(--space-md);
         color:          var(--txt-h);
         text-transform: uppercase;
         letter-spacing: 1px;
+        align-self:     {("center" if hero_align == "Center" else "flex-start")};
     }}
 
-    .hero-btn-group {{ display: flex; gap: var(--space-sm); flex-wrap: wrap; }}
+    .hero-btn-group {{
+        display:         flex;
+        gap:             var(--space-sm);
+        flex-wrap:       wrap;
+        {h_btn_justify}
+    }}
 
     .modern-hero-visual {{
         position:        relative;
