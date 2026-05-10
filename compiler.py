@@ -271,8 +271,9 @@ def build_page(cfg: SiteConfig, title: str, content: str) -> str:
         f"<script>window.dataLayer=window.dataLayer||[];function gtag(){{dataLayer.push(arguments);}}gtag('js',new Date());gtag('config','{cfg.ga_tag}');</script>"
     ) if cfg.ga_tag else ""
 
-    font_q = f"{cfg.h_font.replace(' ', '+')}:wght@400;600;800;900&family={cfg.b_font.replace(' ', '+')}:wght@300;400;500;700"
-    font_url = f"https://fonts.googleapis.com/css2?family={font_q}&display=swap"
+    # Font loading — delegate entirely to titan_themes so the preload URL,
+    # weight set, and @font-face size-adjust block stay in perfect sync.
+    font_tags  = titan_themes.gen_font_preload_html(cfg.h_font, cfg.b_font)
     modern_css = build_css(cfg)
 
     return f"""<!DOCTYPE html>
@@ -283,12 +284,11 @@ def build_page(cfg: SiteConfig, title: str, content: str) -> str:
     <title>{title} | {cfg.biz_name}</title>
     <meta name="description" content="{cfg.seo_d}">
     {gsc_meta}{og_meta}{pwa_tags}{gen_schema(cfg)}
-    <link rel="preload" as="image" href="{cfg.hero_img_1}">
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link rel="preload" as="style" href="{font_url}">
-    <link rel="stylesheet" href="{font_url}" media="print" onload="this.media='all'">
-    <noscript><link rel="stylesheet" href="{font_url}"></noscript>
+    <!-- LCP image preload — fetchpriority tells the browser this is the most
+         important resource on the page, eliminating the LCP discovery delay -->
+    <link rel="preload" as="image" href="{cfg.hero_img_1}" fetchpriority="high">
+    <!-- Font loading — 4-tag performance pattern (preconnect×2, preload, swap) -->
+    {font_tags}
     <style>{modern_css}</style>
     {ga_script}
     {templates.gen_2050_scripts(cfg)}
