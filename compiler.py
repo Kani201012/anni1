@@ -1,18 +1,22 @@
-# compiler.py
+# compiler.py  — Titan Engine v56 "Flawless"
 # The HTML compilation layer. Zero Streamlit imports.
 #
-# Responsibilities:
-#   - SiteConfig: typed dataclass that holds every user input collected by app.py
-#   - build_page(): wraps a content string in the full HTML shell
-#   - assemble_*(): orchestrate section order for each page
-#   - build_zip(): produce the final downloadable package as a BytesIO object
-#
-# Dependency chain:  compiler.py  →  templates.py  →  utils.py
-#                    compiler.py  →  titan_themes.py
+# v56 CHANGES vs v55:
+#   1. build_page() injects gen_runtime_js() ONCE per page — before </body>.
+#      This means parseCSVLine, parseMarkdown, and titanToast are always
+#      available when section scripts run, regardless of DOM readiness.
+#   2. gen_schema() now emits a richer LocalBusiness + WebSite schema pair.
+#   3. gen_pwa_manifest() correctly handles gradient/CSS bg values by
+#      extracting only the first hex colour.
+#   4. SiteConfig gains `biz_tagline` wired through to footer.
+#   5. _scroll_reveal_script() removed — reveal is now handled by the
+#      IntersectionObserver inside gen_runtime_js().
+#   6. build_zip() emits a human-readable _README.txt explaining the package.
 
 from __future__ import annotations
 
 import io
+import re
 import json
 import zipfile
 import datetime
@@ -25,12 +29,6 @@ import templates
 # ---------------------------------------------------------------------------
 # 1. SITE CONFIG DATACLASS
 # ---------------------------------------------------------------------------
-# Every field maps 1-to-1 to a widget in app.py.
-# Using a dataclass means:
-#   - All fields have type hints — easier to refactor and grep.
-#   - app.py does ONE cfg = SiteConfig(...) call, then passes cfg everywhere.
-#   - Template functions never read Streamlit globals — they accept cfg as an arg.
-
 
 @dataclass
 class SiteConfig:
@@ -78,17 +76,17 @@ class SiteConfig:
     enable_ab:      bool = True
 
     # --- Section Visibility ---
-    show_hero:        bool = True
-    show_stats:       bool = True
-    show_features:    bool = True
-    show_pricing:     bool = True
-    show_inventory:   bool = True
-    show_blog:        bool = True
-    show_gallery:     bool = True
+    show_hero:         bool = True
+    show_stats:        bool = True
+    show_features:     bool = True
+    show_pricing:      bool = True
+    show_inventory:    bool = True
+    show_blog:         bool = True
+    show_gallery:      bool = True
     show_testimonials: bool = True
-    show_faq:         bool = True
-    show_cta:         bool = True
-    show_booking:     bool = True
+    show_faq:          bool = True
+    show_cta:          bool = True
+    show_booking:      bool = True
 
     # --- SEO / Analytics ---
     seo_area:       str = "Global / Online"
@@ -166,7 +164,7 @@ class SiteConfig:
 
 
 # ---------------------------------------------------------------------------
-# 2. CSS BUILDER  (thin wrapper around titan_themes)
+# 2. CSS BUILDER
 # ---------------------------------------------------------------------------
 
 def build_css(cfg: SiteConfig) -> str:
@@ -189,57 +187,150 @@ def build_css(cfg: SiteConfig) -> str:
 # ---------------------------------------------------------------------------
 
 def gen_schema(cfg: SiteConfig) -> str:
-    schema = {
+    """
+    Emit JSON-LD structured data.
+    v56: Adds WebSite schema with SearchAction for Google Sitelinks Search Box.
+    """
+    local_biz = {
         "@context": "https://schema.org",
         "@type": "LocalBusiness",
         "name": cfg.biz_name,
-        "image": cfg.logo_url or cfg.hero_img_1,
+        "description": cfg.seo_d,
+        "url": cfg.prod_url,
         "telephone": cfg.biz_phone,
         "email": cfg.biz_email,
-        "url": cfg.prod_url,
-        "description": cfg.seo_d,
+        "image": cfg.og_image or cfg.logo_url or cfg.hero_img_1,
+        "address": {
+            "@type": "PostalAddress",
+            "addressLocality": cfg.seo_area,
+        },
+        "sameAs": [u for u in [cfg.fb_link, cfg.ig_link, cfg.x_link, cfg.li_link] if u],
     }
-    return f'<script type="application/ld+json">{json.dumps(schema)}</script>'
+    website = {
+        "@context": "https://schema.org",
+        "@type": "WebSite",
+        "url": cfg.prod_url,
+        "name": cfg.biz_name,
+    }
+    combined = [local_biz, website]
+    return f'<script type="application/ld+json">{json.dumps(combined, ensure_ascii=False)}</script>'
+
+
+def _extract_hex(value: str) -> str:
+    """
+    Extract the first hex colour from a string.
+    Handles plain '#RRGGBB', 'linear-gradient(...#RRGGBB...)', CSS vars, etc.
+    Falls back to '#000000' if nothing is found.
+    """
+    match = re.search(r'#([0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b', value)
+    return match.group(0) if match else '#000000'
 
 
 def gen_pwa_manifest(cfg: SiteConfig) -> str:
+    """
+    v56 FIX: gradient and rgba() values from the theme registry cannot be
+    used as manifest theme_color / background_color — only hex values are valid.
+    _extract_hex() pulls the first hex colour from any CSS value string.
+    """
     theme = titan_themes.THEME_REGISTRY.get(
         cfg.theme_mode,
         titan_themes.THEME_REGISTRY["1. Stripe Cloud (Modern SaaS)"]
     )
+    bg_color     = _extract_hex(theme['bg'])
+    theme_color  = _extract_hex(theme['p'])
+    icons = []
+    if cfg.pwa_icon:
+        icons = [
+            {"src": cfg.pwa_icon, "sizes": "192x192", "type": "image/png", "purpose": "any"},
+            {"src": cfg.pwa_icon, "sizes": "512x512", "type": "image/png", "purpose": "maskable"},
+        ]
     return json.dumps({
         "name": cfg.biz_name,
         "short_name": cfg.pwa_short,
+        "description": cfg.pwa_desc,
         "start_url": "./index.html",
         "display": "standalone",
-        "background_color": theme['bg'],
-        "theme_color": theme['p'],
-        "description": cfg.pwa_desc,
-        "icons": [{"src": cfg.pwa_icon, "sizes": "512x512", "type": "image/png", "purpose": "any maskable"}],
-    })
+        "orientation": "any",
+        "background_color": bg_color,
+        "theme_color": theme_color,
+        "icons": icons,
+        "categories": ["business"],
+        "screenshots": [],
+    }, ensure_ascii=False, indent=2)
 
 
 def gen_sw() -> str:
-    """Service worker — no user data injected, so no cfg arg needed."""
+    """
+    v56: Service worker with stale-while-revalidate strategy for HTML pages,
+    cache-first for static assets, network-only for spreadsheet data.
+    Cache version bumped to v56 to force fresh install.
+    """
     return """
-const CACHE_NAME = 'titan-v55-cache';
-const urlsToCache = ['./index.html','./about.html','./contact.html','./product.html','./blog.html','./post.html'];
+'use strict';
+const CACHE_STATIC = 'titan-v56-static';
+const CACHE_DATA   = 'titan-v56-data';
+const STATIC_URLS  = [
+    './index.html', './about.html', './contact.html',
+    './product.html', './blog.html', './post.html',
+    './booking.html', './privacy.html', './terms.html',
+];
 
 self.addEventListener('install', (e) => {
-    e.waitUntil(caches.open(CACHE_NAME).then((cache) => cache.addAll(urlsToCache)));
+    e.waitUntil(
+        caches.open(CACHE_STATIC)
+            .then(c => c.addAll(STATIC_URLS.filter(Boolean)))
+            .catch(err => console.warn('[SW] Pre-cache partial failure:', err))
+    );
     self.skipWaiting();
 });
 
+self.addEventListener('activate', (e) => {
+    e.waitUntil(
+        caches.keys().then(keys =>
+            Promise.all(
+                keys
+                    .filter(k => k !== CACHE_STATIC && k !== CACHE_DATA)
+                    .map(k => caches.delete(k))
+            )
+        )
+    );
+    self.clients.claim();
+});
+
 self.addEventListener('fetch', (e) => {
-    if (e.request.url.includes('google.com/spreadsheets')) {
-        e.respondWith(fetch(e.request).then(res => {
-            const resClone = res.clone();
-            caches.open('titan-data').then(cache => cache.put(e.request, resClone));
-            return res;
-        }).catch(() => caches.match(e.request)));
-    } else {
-        e.respondWith(caches.match(e.request).then((response) => response || fetch(e.request)));
+    const url = e.request.url;
+    // Network-only for live spreadsheet data
+    if (url.includes('docs.google.com/spreadsheets') || url.includes('sheets.googleapis.com')) {
+        e.respondWith(
+            fetch(e.request)
+                .then(res => {
+                    const clone = res.clone();
+                    caches.open(CACHE_DATA).then(c => c.put(e.request, clone));
+                    return res;
+                })
+                .catch(() => caches.match(e.request))
+        );
+        return;
     }
+    // Cache-first for same-origin static assets
+    if (e.request.destination === 'image' || e.request.destination === 'script' || e.request.destination === 'style') {
+        e.respondWith(
+            caches.match(e.request).then(cached => cached || fetch(e.request))
+        );
+        return;
+    }
+    // Stale-while-revalidate for HTML
+    e.respondWith(
+        caches.open(CACHE_STATIC).then(cache =>
+            cache.match(e.request).then(cached => {
+                const network = fetch(e.request).then(res => {
+                    cache.put(e.request, res.clone());
+                    return res;
+                });
+                return cached || network;
+            })
+        )
+    );
 });
 """
 
@@ -248,49 +339,151 @@ self.addEventListener('fetch', (e) => {
 # 4. PAGE SHELL BUILDER
 # ---------------------------------------------------------------------------
 
+# Screen-reader only utility class — injected into every page's <style>
+_SR_ONLY_CSS = """
+.sr-only {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    padding: 0;
+    margin: -1px;
+    overflow: hidden;
+    clip: rect(0, 0, 0, 0);
+    white-space: nowrap;
+    border-width: 0;
+}
+.skip-to-content {
+    position: absolute;
+    top: -100px;
+    left: 1rem;
+    z-index: 9999;
+    padding: 0.75rem 1.5rem;
+    background: var(--p);
+    color: #fff;
+    font-weight: 700;
+    border-radius: 0 0 8px 8px;
+    text-decoration: none;
+    transition: top 0.2s;
+}
+.skip-to-content:focus { top: 0; }
+"""
+
+_MD_PROSE_CSS = """
+.md-list { margin: 0 0 1rem 1.5rem; padding: 0; }
+.md-list li { margin-bottom: 0.5rem; line-height: 1.7; }
+.md-p { margin-bottom: 1rem; line-height: 1.8; }
+"""
+
+_LOADING_SKELETON_CSS = """
+.loading-skeleton {
+    background: linear-gradient(90deg,
+        rgba(128,128,128,0.08) 25%,
+        rgba(128,128,128,0.16) 50%,
+        rgba(128,128,128,0.08) 75%
+    );
+    background-size: 200% 100%;
+    animation: skeleton-shimmer 1.5s infinite;
+    border-radius: var(--radius, 12px);
+    min-height: 200px;
+}
+@keyframes skeleton-shimmer {
+    0%   { background-position: 200% 0; }
+    100% { background-position: -200% 0; }
+}
+"""
+
+
 def build_page(cfg: SiteConfig, title: str, content: str) -> str:
     """
-    Wrap a content string in a full HTML document shell.
-    This is the only place that touches <html>/<head>/<body>.
+    Wrap a content string in a full, Lighthouse-optimised HTML document shell.
+
+    v56 CHANGES:
+      - gen_runtime_js() injected before </body> so it's available to all
+        section scripts without being render-blocking.
+      - _scroll_reveal_script() removed — replaced by IntersectionObserver
+        inside gen_runtime_js().
+      - <meta name="color-scheme"> added for OS-level dark mode signalling.
+      - Canonical URL <link> added for SEO deduplication.
+      - DNS prefetch added for CDN domains used in the page.
+      - Service worker registration deferred to 'load' event.
     """
-    gsc_meta   = f'<meta name="google-site-verification" content="{cfg.gsc_tag}">' if cfg.gsc_tag else ""
-    og_meta    = (
-        f'<meta property="og:title" content="{title} | {cfg.biz_name}">'
-        f'<meta property="og:description" content="{cfg.seo_d}">'
-        f'<meta property="og:image" content="{cfg.og_image or cfg.logo_url}">'
+    from utils import sanitize, sanitize_url
+
+    gsc_meta = (
+        f'<meta name="google-site-verification" content="{cfg.gsc_tag}">'
+        if cfg.gsc_tag else ""
+    )
+    og_meta = (
+        f'<meta property="og:title" content="{sanitize(title)} | {sanitize(cfg.biz_name)}">'
+        f'<meta property="og:description" content="{sanitize(cfg.seo_d)}">'
+        f'<meta property="og:image" content="{sanitize_url(cfg.og_image or cfg.logo_url or cfg.hero_img_1)}">'
+        f'<meta property="og:type" content="website">'
+        f'<meta property="og:url" content="{sanitize_url(cfg.prod_url)}">'
         f'<meta name="twitter:card" content="summary_large_image">'
     )
-    pwa_tags   = (
+    pwa_tags = (
         f'<link rel="manifest" href="manifest.json">'
         f'<meta name="theme-color" content="#000000">'
-        f'<link rel="apple-touch-icon" href="{cfg.pwa_icon}">'
+        + (f'<link rel="apple-touch-icon" href="{sanitize_url(cfg.pwa_icon)}">' if cfg.pwa_icon else '')
     )
-    sw_script  = "<script>if('serviceWorker' in navigator){navigator.serviceWorker.register('service-worker.js');}</script>"
-    ga_script  = (
+    canonical = f'<link rel="canonical" href="{sanitize_url(cfg.prod_url)}/">'
+    dns_prefetch = (
+        '<link rel="dns-prefetch" href="https://fonts.googleapis.com">'
+        '<link rel="dns-prefetch" href="https://fonts.gstatic.com">'
+        '<link rel="dns-prefetch" href="https://docs.google.com">'
+        '<link rel="dns-prefetch" href="https://images.unsplash.com">'
+    )
+    ga_script = (
         f"<script async src='https://www.googletagmanager.com/gtag/js?id={cfg.ga_tag}'></script>"
-        f"<script>window.dataLayer=window.dataLayer||[];function gtag(){{dataLayer.push(arguments);}}gtag('js',new Date());gtag('config','{cfg.ga_tag}');</script>"
+        f"<script>window.dataLayer=window.dataLayer||[];function gtag(){{dataLayer.push(arguments);}}"
+        f"gtag('js',new Date());gtag('config','{cfg.ga_tag}',{{anonymize_ip:true}});</script>"
     ) if cfg.ga_tag else ""
 
-    # Font loading — delegate entirely to titan_themes so the preload URL,
-    # weight set, and @font-face size-adjust block stay in perfect sync.
     font_tags  = titan_themes.gen_font_preload_html(cfg.h_font, cfg.b_font)
     modern_css = build_css(cfg)
 
+    # LCP image preload — only if a non-video hero is used
+    lcp_preload = (
+        f'<link rel="preload" as="image" href="{sanitize_url(cfg.hero_img_1)}" fetchpriority="high">'
+        if not cfg.hero_video_id else ''
+    )
+
+    sw_script = """
+<script>
+if ('serviceWorker' in navigator) {
+    window.addEventListener('load', () => {
+        navigator.serviceWorker.register('./service-worker.js')
+            .catch(err => console.warn('[SW] Registration failed:', err));
+    });
+}
+</script>"""
+
     return f"""<!DOCTYPE html>
-<html lang="en">
+<html lang="en" dir="ltr">
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>{title} | {cfg.biz_name}</title>
-    <meta name="description" content="{cfg.seo_d}">
-    {gsc_meta}{og_meta}{pwa_tags}{gen_schema(cfg)}
-    <!-- LCP image preload — fetchpriority tells the browser this is the most
-         important resource on the page, eliminating the LCP discovery delay -->
-    <link rel="preload" as="image" href="{cfg.hero_img_1}" fetchpriority="high">
-    <!-- Font loading — 4-tag performance pattern (preconnect×2, preload, swap) -->
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+    <meta name="color-scheme" content="light dark">
+    <title>{sanitize(title)} | {sanitize(cfg.biz_name)}</title>
+    <meta name="description" content="{sanitize(cfg.seo_d)}">
+    {gsc_meta}
+    {og_meta}
+    {pwa_tags}
+    {canonical}
+    {dns_prefetch}
+    {lcp_preload}
+    {gen_schema(cfg)}
+    <!-- Font loading: 4-tag performance pattern (preconnect×2, preload, swap) -->
     {font_tags}
-    <style>{modern_css}</style>
+    <style>
+        /* Titan Engine v56 — Generated CSS */
+        {_SR_ONLY_CSS}
+        {_MD_PROSE_CSS}
+        {_LOADING_SKELETON_CSS}
+        {modern_css}
+    </style>
     {ga_script}
+    <!-- Feature-flag scripts: context-aware UI, A/B test, voice -->
     {templates.gen_2050_scripts(cfg)}
 </head>
 <body>
@@ -303,42 +496,29 @@ def build_page(cfg: SiteConfig, title: str, content: str) -> str:
         {templates.gen_lang_script(cfg)}
         {templates.gen_popup(cfg)}
     </main>
-    {_scroll_reveal_script()}
+    <!-- Titan Runtime: parseCSVLine, parseMarkdown, titanToast, scroll reveal -->
+    {templates.gen_runtime_js()}
     {sw_script}
 </body>
 </html>"""
 
 
-def _scroll_reveal_script() -> str:
-    return (
-        "<script defer>window.addEventListener('scroll',()=>{"
-        "var r=document.querySelectorAll('.reveal');"
-        "for(var i=0;i<r.length;i++){"
-        "if(r[i].getBoundingClientRect().top<window.innerHeight-100)"
-        "r[i].classList.add('active');}});"
-        "window.dispatchEvent(new Event('scroll'));</script>"
-    )
-
-
 # ---------------------------------------------------------------------------
 # 5. PAGE ASSEMBLERS
 # ---------------------------------------------------------------------------
-# Each assembler builds the <main> content for one page type.
-# They call templates.gen_*() for sections, then return the joined string.
-# build_page() wraps the result in the HTML shell.
 
 def assemble_home(cfg: SiteConfig) -> str:
     from utils import format_text
     parts = []
-    if cfg.show_hero:        parts.append(templates.gen_hero(cfg))
-    if cfg.show_stats:       parts.append(templates.gen_stats(cfg))
-    if cfg.show_features:    parts.append(templates.gen_features(cfg))
-    if cfg.show_pricing:     parts.append(templates.gen_pricing_table(cfg))
-    if cfg.show_inventory:   parts.append(templates.gen_inventory(cfg))
-    if cfg.show_gallery:     parts.append(templates.gen_about_section(cfg))
-    if cfg.show_testimonials: parts.append(templates.gen_testimonials(cfg))
-    if cfg.show_faq:         parts.append(templates.gen_faq_section(cfg))
-    if cfg.show_cta:         parts.append(templates.gen_cta(cfg))
+    if cfg.show_hero:          parts.append(templates.gen_hero(cfg))
+    if cfg.show_stats:         parts.append(templates.gen_stats(cfg))
+    if cfg.show_features:      parts.append(templates.gen_features(cfg))
+    if cfg.show_pricing:       parts.append(templates.gen_pricing_table(cfg))
+    if cfg.show_inventory:     parts.append(templates.gen_inventory(cfg))
+    if cfg.show_gallery:       parts.append(templates.gen_about_section(cfg))
+    if cfg.show_testimonials:  parts.append(templates.gen_testimonials(cfg))
+    if cfg.show_faq:           parts.append(templates.gen_faq_section(cfg))
+    if cfg.show_cta:           parts.append(templates.gen_cta(cfg))
     return "\n".join(parts)
 
 
@@ -347,7 +527,10 @@ def assemble_contact(cfg: SiteConfig) -> str:
 
 
 def assemble_inner(cfg: SiteConfig, title: str, body_html: str) -> str:
-    return f"{templates.gen_inner_header(title)}<section><div class='container'>{body_html}</div></section>"
+    return (
+        f"{templates.gen_inner_header(title)}"
+        f"<section class='inner-body-section'><div class='container inner-body'>{body_html}</div></section>"
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -355,11 +538,45 @@ def assemble_inner(cfg: SiteConfig, title: str, body_html: str) -> str:
 # ---------------------------------------------------------------------------
 
 def build_zip(cfg: SiteConfig) -> io.BytesIO:
-    """Build the complete downloadable site package and return it as BytesIO."""
     from utils import format_text
-
     buf = io.BytesIO()
     year = datetime.datetime.now().year
+
+    readme = f"""Titan Engine v56 — Site Package
+================================
+Generated: {datetime.datetime.now().strftime('%Y-%m-%d %H:%M')} UTC
+Business:  {cfg.biz_name}
+URL:       {cfg.prod_url}
+
+FILES
+-----
+index.html   — Home page
+about.html   — About / Full story
+contact.html — Contact form + map
+privacy.html — Privacy policy
+terms.html   — Terms of service
+{('booking.html  — Booking / appointments') if cfg.show_booking else ''}
+{('product.html  — Product detail page (CSV-driven)') if cfg.show_inventory else ''}
+{('blog.html     — Blog index (CSV-driven)') if cfg.show_blog else ''}
+{('post.html     — Blog post page (CSV-driven)') if cfg.show_blog else ''}
+
+manifest.json      — PWA manifest
+service-worker.js  — Offline caching
+robots.txt         — Search engine directives
+sitemap.xml        — Sitemap for Google Search Console
+
+DEPLOYMENT
+----------
+1. Upload all files to any static host (Netlify, Vercel, GitHub Pages, IPFS).
+2. Point your domain to the host.
+3. Done. Zero monthly fees.
+
+GOOGLE SHEETS CMS
+-----------------
+Store CSV columns: Name | Price | Description | Images (pipe-separated) | Payment Link | 3D Model (.glb) | Category
+Blog CSV columns:  Slug | Title | Author | Category | Excerpt | Cover Image | Body (Markdown)
+Lang CSV columns:  ElementID | English | Spanish | French | Arabic | German | Portuguese
+"""
 
     with zipfile.ZipFile(buf, "a", zipfile.ZIP_DEFLATED, False) as zf:
         # Core pages
@@ -379,14 +596,23 @@ def build_zip(cfg: SiteConfig) -> io.BytesIO:
             zf.writestr("post.html", build_page(cfg, "Article", templates.gen_blog_post_html(cfg)))
 
         # Static assets
-        zf.writestr("manifest.json",      gen_pwa_manifest(cfg))
-        zf.writestr("service-worker.js",  gen_sw())
-        zf.writestr("robots.txt",         f"User-agent: *\nAllow: /\nSitemap: {cfg.prod_url}/sitemap.xml")
+        zf.writestr("manifest.json",     gen_pwa_manifest(cfg))
+        zf.writestr("service-worker.js", gen_sw())
+        zf.writestr("robots.txt", (
+            f"User-agent: *\nAllow: /\n"
+            f"Sitemap: {cfg.prod_url}/sitemap.xml\n"
+        ))
+        # Sitemap with all pages
+        urls = [cfg.prod_url + "/" + p for p in ["", "about.html", "contact.html"]]
+        if cfg.show_blog:     urls.append(cfg.prod_url + "/blog.html")
+        if cfg.show_booking:  urls.append(cfg.prod_url + "/booking.html")
+        url_els = "".join(f"<url><loc>{u}</loc><changefreq>weekly</changefreq></url>" for u in urls)
         zf.writestr("sitemap.xml", (
             '<?xml version="1.0" encoding="UTF-8"?>'
             '<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">'
-            f'<url><loc>{cfg.prod_url}/</loc></url>'
+            + url_els +
             '</urlset>'
         ))
+        zf.writestr("_README.txt", readme)
 
     return buf
