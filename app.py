@@ -1,439 +1,407 @@
-# app.py  (v55 — Refactored)
-# ─────────────────────────────────────────────────────────────────
-# This file is ONLY responsible for:
-#   1. Streamlit UI (sidebar, tabs, widgets)
-#   2. Packing widget values into a SiteConfig dataclass
-#   3. Calling compiler.build_page() and rendering the result
-#   4. Building the ZIP and handling download / IPFS push
-#
-# It NEVER builds an HTML string itself.
-# All HTML generation lives in templates.py, orchestrated by compiler.py.
-# ─────────────────────────────────────────────────────────────────
+"""
+QuantBengal Engine — scanner.py  v10.0  (Oracle VM Production Master)
+======================================================================
+PURPOSE:
+  Morning market scan at 09:00 IST.
+  Scans the Nifty 100 universe (top 50 by liquidity for speed).
+  Finds institutional momentum setups — bullish and bearish.
+  Sends results to Telegram and persists to Supabase market_scans table.
 
-import streamlit as st
-import io
-import json
-import requests
+v10.0 UPGRADE over v9.0:
+  [SCAN-9]  rank_indices_by_adx() — New public async method.
+            Called by main.py's select_champion_index() to determine
+            the "Champion" index for the trading session.
+            Downloads 90 days of daily data for NIFTY, BANKNIFTY, and
+            SENSEX, computes 14-period ADX on each, and returns a
+            sorted dict: { "BANKNIFTY": 32.5, "NIFTY": 27.1, "SENSEX": 19.4 }
+            in descending order (highest ADX first).
+            This method is standalone — it does NOT interfere with the
+            existing scan_market() method or Nifty-100 stock scan.
+            All error handling is self-contained: failed downloads return
+            score 0.0 for that index without raising an exception.
 
-import titan_themes
-from compiler import SiteConfig, build_page, build_zip, assemble_home, assemble_contact, assemble_inner
-import templates
-from utils import format_text
+PRESERVED 100% FROM v9.0:
+  - NIFTY_100 symbol list
+  - All filter thresholds (BULL_ADX_MIN, BEAR_ADX_MIN, VOL_SPIKE, etc.)
+  - scan_market() async wrapper
+  - _run_scan_sync() synchronous engine
+  - _analyse_symbol() per-symbol indicator logic
+  - format_report() Telegram HTML formatter
+  - All SCAN-1 through SCAN-8 changes
+"""
 
-# ─────────────────────────────────────────────────────────────────
-# 0. SESSION STATE DEFAULTS
-# ─────────────────────────────────────────────────────────────────
+import asyncio
+import logging
+from datetime import datetime
 
-def _init(key, val):
-    if key not in st.session_state:
-        st.session_state[key] = val
+import pandas as pd
+import yfinance as yf
 
-_init('hero_h',    "Stop Paying Rent for Your Website.")
-_init('hero_sub',  "The Titan Engine. Pay once. Own it forever.")
-_init('about_h',   "Control Your Empire from a Spreadsheet")
-_init('about_short', "No plugins. No dashboard. Just a Google Sheet.")
-_init('feat_data', (
-    "bolt | The Performance Pillar | **0.1s High-Velocity Loading**. Titan loads instantly.\n"
-    "wallet | The Economic Pillar | **$0 Monthly Fees**. Hosting subscriptions eliminated.\n"
-    "table | The Functional Pillar | **Google Sheets CMS**. Update from a spreadsheet.\n"
-    "shield | The Authority Pillar | **Unhackable Security**. Zero-DB Architecture.\n"
-    "layers | The Reliability Pillar | **Global Edge Deployment**. 100+ servers.\n"
-    "star | The Conversion Pillar | **One-Tap WhatsApp**. Direct-to-Chat technology."
-))
+from ta.trend import EMAIndicator, ADXIndicator
+from ta.momentum import RSIIndicator
 
-# ─────────────────────────────────────────────────────────────────
-# 1. PAGE CONFIG
-# ─────────────────────────────────────────────────────────────────
+logger = logging.getLogger("QB.Scanner")
 
-st.set_page_config(
-    page_title="Titan Architect | v55 Apex",
-    layout="wide",
-    page_icon="⚡",
-    initial_sidebar_state="expanded",
-)
+# ── Nifty 100 — Top 50 by F&O liquidity (Yahoo Finance format) ───────────────
+NIFTY_100 = [
+    "RELIANCE.NS", "TCS.NS",        "HDFCBANK.NS",   "ICICIBANK.NS",  "BHARTIARTL.NS",
+    "SBIN.NS",     "INFY.NS",       "LICI.NS",        "ITC.NS",        "HUL.NS",
+    "LT.NS",       "BAJFINANCE.NS", "HCLTECH.NS",     "MARUTI.NS",     "SUNPHARMA.NS",
+    "ADANIENT.NS", "KOTAKBANK.NS",  "TITAN.NS",       "ONGC.NS",       "TATAMOTORS.NS",
+    "NTPC.NS",     "AXISBANK.NS",   "ADANIPORTS.NS",  "ASIANPAINT.NS", "COALINDIA.NS",
+    "BAJAJFINSV.NS","ULTRACEMCO.NS","POWERGRID.NS",   "JSWSTEEL.NS",   "M&M.NS",
+    "TATASTEEL.NS","SIEMENS.NS",    "HINDALCO.NS",    "GRASIM.NS",     "SBILIFE.NS",
+    "BRITANNIA.NS","ADANIPOWER.NS", "CIPLA.NS",       "INDUSINDBK.NS", "DRREDDY.NS",
+    "EICHERMOT.NS","WIPRO.NS",      "BPCL.NS",        "NESTLEIND.NS",  "BAJAJ-AUTO.NS",
+    "TATACONSUM.NS","HAL.NS",       "DLF.NS",         "VBL.NS",        "BEL.NS",
+]
 
-st.markdown("""
-<style>
-:root{--primary:#0f172a;--accent:#ef4444}
-.stApp{background-color:#f8fafc;color:#1e293b;font-family:'Inter',sans-serif}
-[data-testid="stSidebar"]{background-color:#ffffff;border-right:1px solid #e2e8f0}
-[data-testid="stSidebar"] h1{
-    background:linear-gradient(90deg,#0f172a,#ef4444);
-    -webkit-background-clip:text;-webkit-text-fill-color:transparent;
-    font-weight:900!important;font-size:1.8rem!important
+# ── [SCAN-9] Index tickers for Champion scan ─────────────────────────────────
+_INDEX_TICKERS = {
+    "NIFTY":     "^NSEI",
+    "BANKNIFTY": "^NSEBANK",
+    "SENSEX":    "^BSESN",
 }
-.stTextInput input,.stTextArea textarea{
-    background-color:#ffffff!important;border:1px solid #cbd5e1!important;
-    border-radius:8px!important;color:#0f172a!important
-}
-.stButton>button{
-    width:100%;border-radius:8px;height:3.5rem;
-    background:linear-gradient(135deg,#0f172a 0%,#334155 100%);
-    color:white;font-weight:800;border:none;
-    box-shadow:0 4px 15px rgba(15,23,42,0.3);
-    text-transform:uppercase;letter-spacing:1px;transition:transform 0.2s
-}
-.stButton>button:hover{transform:translateY(-2px)}
-</style>
-""", unsafe_allow_html=True)
+
+# ── Filter thresholds — UNCHANGED from v9.0 ───────────────────────────────────
+BULL_ADX_MIN   = 25.0
+BULL_RSI_MIN   = 55.0
+BULL_VOL_SPIKE = 1.5
+BEAR_ADX_MIN   = 25.0
+BEAR_RSI_MAX   = 40.0
+BEAR_VOL_SPIKE = 2.0
+DATA_PERIOD    = "90d"
+DATA_INTERVAL  = "1d"
+TOP_N_RESULTS  = 5
+
+# ADX indicator window shared across both scan types
+_ADX_WINDOW    = 14
+_ADX_MIN_ROWS  = _ADX_WINDOW * 2   # 28 rows needed for ADX warm-up
 
 
-# ─────────────────────────────────────────────────────────────────
-# 2. SIDEBAR
-# ─────────────────────────────────────────────────────────────────
+class MarketScanner:
 
-with st.sidebar:
-    st.title("Titan Architect")
-    st.caption("v55.0 | Edge-Dynamic Architecture")
-    st.divider()
+    def __init__(self, symbols: list = None):
+        self.symbols = symbols or NIFTY_100
 
-    # ── AI GENERATOR ──────────────────────────────────────────────
-    with st.expander("🤖 AI Copy Generator", expanded=False):
-        raw_key  = st.text_input("Groq API Key", type="password")
-        biz_desc = st.text_input("Business Description")
-        if st.button("✨ Generate Copy"):
-            if not raw_key.strip() or not biz_desc:
-                st.error("API key and description required.")
-            else:
-                try:
-                    with st.spinner("Writing…"):
-                        url  = "https://api.groq.com/openai/v1/chat/completions"
-                        hdrs = {"Authorization": f"Bearer {raw_key.strip()}", "Content-Type": "application/json"}
-                        prompt = (
-                            f"Act as a copywriter. Return JSON for '{biz_desc}': "
-                            "hero_h, hero_sub, about_h, about_short, feat_data (icon|Title|Desc format)."
-                        )
-                        data = {
-                            "messages": [{"role": "user", "content": prompt}],
-                            "model": "llama-3.1-8b-instant",
-                            "response_format": {"type": "json_object"},
-                        }
-                        resp = requests.post(url, headers=hdrs, json=data)
-                        if resp.status_code == 200:
-                            parsed = json.loads(resp.json()['choices'][0]['message']['content'])
-                            for key in ('hero_h', 'hero_sub', 'about_h', 'about_short'):
-                                if key in parsed:
-                                    st.session_state[key] = str(parsed[key])
-                            if 'feat_data' in parsed:
-                                fd = parsed['feat_data']
-                                st.session_state.feat_data = "\n".join(map(str, fd)) if isinstance(fd, list) else str(fd)
-                            st.success("Generated!")
-                            st.rerun()
-                except Exception as e:
-                    st.error(f"Error: {e}")
+    # ══════════════════════════════════════════════════════════════════════
+    #  [SCAN-9] CHAMPION INDEX ADX RANKER
+    # ══════════════════════════════════════════════════════════════════════
 
-    # ── DESIGN STUDIO + TYPOGRAPHY (merged — was two expanders) ───
-    with st.expander("🎨 Design Studio", expanded=True):
-        theme_names = list(titan_themes.THEME_REGISTRY.keys())
-        theme_mode  = st.selectbox("Theme", theme_names)
-        st.divider()
-        c1, c2 = st.columns(2)
-        hero_layout = c1.selectbox("Hero Alignment", ["Center", "Left"])
-        h_font      = c1.selectbox("Heading Font",   ["Space Grotesk", "Montserrat", "Playfair Display", "Outfit"])
-        b_font      = c2.selectbox("Body Font",       ["Inter", "Plus Jakarta Sans", "Roboto"])
-        col_h       = c2.color_picker("Heading Color",   "#0f172a")
-        col_b       = c2.color_picker("Body Color",      "#475569")
-        st.divider()
-        size_h1     = st.slider("H1 Size (rem)", 1.0, 8.0, 4.5)
-        size_p      = st.slider("Body Size (rem)", 0.8, 2.0, 1.1)
-        st.divider()
-        cta_bg      = st.color_picker("CTA Background", "#10b981")
-        cta_txt     = st.color_picker("CTA Text",       "#ffffff")
+    async def rank_indices_by_adx(self) -> dict:
+        """
+        [SCAN-9] Computes 14-period ADX for NIFTY, BANKNIFTY, and SENSEX
+        using 90 days of daily price data from yfinance.
 
-    # ── FEATURES + SECTIONS (merged — was two expanders) ──────────
-    with st.expander("🚀 Features & Sections", expanded=True):
-        st.markdown("**Capability flags**")
-        enable_ar      = st.checkbox("AR 3D Models",        value=True)
-        enable_voice   = st.checkbox("Voice Search",        value=True)
-        enable_context = st.checkbox("Context-Aware UI",    value=True)
-        enable_ab      = st.checkbox("A/B Testing",         value=True)
-        st.divider()
-        st.markdown("**Page sections**")
-        sc1, sc2 = st.columns(2)
-        show_hero        = sc1.checkbox("Hero",          value=True)
-        show_stats       = sc1.checkbox("Stats",         value=True)
-        show_features    = sc1.checkbox("Features",      value=True)
-        show_pricing     = sc1.checkbox("Pricing",       value=True)
-        show_inventory   = sc1.checkbox("Store",         value=True)
-        show_blog        = sc1.checkbox("Blog",          value=True)
-        show_gallery     = sc2.checkbox("About",         value=True)
-        show_testimonials= sc2.checkbox("Testimonials",  value=True)
-        show_faq         = sc2.checkbox("FAQ",           value=True)
-        show_cta         = sc2.checkbox("Final CTA",     value=True)
-        show_booking     = sc2.checkbox("Booking",       value=True)
+        Returns:
+            dict sorted by ADX descending, e.g.:
+            {
+                "BANKNIFTY": 34.2,
+                "NIFTY":     28.7,
+                "SENSEX":    21.1,
+            }
+            On complete failure, returns an empty dict — caller
+            (select_champion_index in main.py) handles the fallback.
 
-    # ── SEO & ANALYTICS + IPFS (merged) ───────────────────────────
-    with st.expander("⚙️ SEO, Analytics & Deploy", expanded=False):
-        seo_area   = st.text_input("Service Area", "Global / Online")
-        gsc_tag    = st.text_input("Google Verification ID")
-        ga_tag     = st.text_input("Google Analytics ID")
-        og_image   = st.text_input("Social Share Image URL")
-        st.divider()
-        pinata_jwt = st.text_input("Pinata JWT (IPFS deploy)", type="password",
-                                   help="Leave blank for ZIP download.")
+        Design decisions:
+          - Uses "90d" period: sufficient for a warm 14-period ADX with
+            plenty of buffer. 5d / 1d data is too shallow for reliable ADX.
+          - Each index is downloaded individually (not bulk) because bulk
+            yfinance download for index tickers (^NSEI, ^NSEBANK) is
+            unreliable with MultiIndex column flattening.
+          - Failure of any single index results in score 0.0 for that
+            index, not a crash. The other indices are still ranked.
+          - Runs in asyncio.to_thread() — never blocks the event loop.
+        """
+        logger.info("🏆 [SCAN-9] Index ADX ranking scan starting…")
+        scores = await asyncio.to_thread(self._rank_indices_sync)
+        if scores:
+            sorted_scores = dict(
+                sorted(scores.items(), key=lambda x: x[1], reverse=True)
+            )
+            logger.info(
+                "🏆 [SCAN-9] Index ADX scores: "
+                + " | ".join(f"{k}: {v:.1f}" for k, v in sorted_scores.items())
+            )
+            return sorted_scores
+        logger.warning("🏆 [SCAN-9] Index ADX ranking returned no scores.")
+        return {}
 
+    def _rank_indices_sync(self) -> dict:
+        """
+        Synchronous inner function — runs in a thread pool via asyncio.to_thread().
+        Downloads and scores each index independently so one failure cannot
+        block the others.
+        """
+        scores = {}
 
-# ─────────────────────────────────────────────────────────────────
-# 3. MAIN WORKSPACE TABS
-# ─────────────────────────────────────────────────────────────────
+        for name, ticker in _INDEX_TICKERS.items():
+            try:
+                raw = yf.download(
+                    tickers  = ticker,
+                    period   = DATA_PERIOD,     # "90d" — same as stock scan
+                    interval = DATA_INTERVAL,   # "1d"
+                    progress = False,
+                )
 
-st.title("🏗️ Titan Engine v55 Compiler")
-
-tab_labels = ["1. Identity", "2. Content", "3. Marketing", "4. Pricing", "5. Store", "6. Booking", "7. Blog", "8. Legal"]
-tabs = st.tabs(tab_labels)
-
-# TAB 1 — IDENTITY
-with tabs[0]:
-    c1, c2 = st.columns(2)
-    biz_name    = c1.text_input("Business Name",    "StopWebRent.com")
-    biz_tagline = c1.text_input("Tagline",          "Stop Renting. Start Owning.")
-    biz_phone   = c1.text_input("Phone",            "966572562151")
-    biz_email   = c1.text_input("Email",            "hello@example.com")
-    prod_url    = c2.text_input("Website URL",      "https://www.stopwebrent.com")
-    biz_addr    = c2.text_area ("Address",          "Kaydiem Script Lab\nKolkata, India", height=80)
-    map_iframe  = c2.text_area ("Google Map Embed", placeholder='<iframe src="..."></iframe>', height=80)
-    seo_d       = c2.text_area ("Meta Description", "Stop paying monthly fees.", height=80)
-    logo_url    = c2.text_input("Logo URL")
-
-    st.subheader("📱 PWA")
-    p1, p2, p3 = st.columns(3)
-    pwa_short = p1.text_input("App Short Name",   biz_name[:12])
-    pwa_desc  = p2.text_input("App Description",  "Official App")
-    pwa_icon  = p3.text_input("App Icon (512px)", logo_url)
-
-    st.subheader("🌍 Multi-Language CSV")
-    lang_sheet = st.text_input("Translation Sheet URL")
-
-    st.subheader("Social Links")
-    s1, s2, s3 = st.columns(3)
-    fb_link = s1.text_input("Facebook")
-    ig_link = s2.text_input("Instagram")
-    x_link  = s3.text_input("X (Twitter)")
-    s4, s5, s6 = st.columns(3)
-    li_link = s4.text_input("LinkedIn")
-    yt_link = s5.text_input("YouTube")
-    wa_num  = s6.text_input("WhatsApp Number", "966572562151")
-
-# TAB 2 — CONTENT
-with tabs[1]:
-    st.subheader("Hero")
-    hero_h        = st.text_input("Headline",           key="hero_h")
-    hero_sub      = st.text_input("Subtext",            key="hero_sub")
-    hero_badge_txt= st.text_input("Badge Text",         "🚀 Next-Generation Architecture")
-    hero_video_id = st.text_input("YouTube BG Override", placeholder="e.g. dQw4w9WgXcQ")
-    hc1, hc2, hc3 = st.columns(3)
-    hero_img_1 = hc1.text_input("Slide 1", "https://images.unsplash.com/photo-1460925895917-afdab827c52f?q=80&w=1600")
-    hero_img_2 = hc2.text_input("Slide 2", "https://images.unsplash.com/photo-1551288049-bebda4e38f71?q=80&w=1600")
-    hero_img_3 = hc3.text_input("Slide 3", "https://images.unsplash.com/photo-1526374965328-7f61d4dc18c5?q=80&w=1600")
-
-    st.divider()
-    st.subheader("Stats")
-    cs1, cs2, cs3 = st.columns(3)
-    stat_1  = cs1.text_input("Stat 1", "0.1s");  label_1 = cs1.text_input("Label 1", "Speed")
-    stat_2  = cs2.text_input("Stat 2", "$0");    label_2 = cs2.text_input("Label 2", "Fees")
-    stat_3  = cs3.text_input("Stat 3", "100%");  label_3 = cs3.text_input("Label 3", "Ownership")
-
-    st.divider()
-    st.subheader("Features")
-    f_title        = st.text_input("Section Title", "Value Pillars")
-    feat_data_input = st.text_area("Features (icon|Title|Desc per line)", key="feat_data", height=150)
-
-    st.divider()
-    st.subheader("About")
-    about_h_in    = st.text_input("About Title",    key="about_h")
-    about_img     = st.text_input("About Image",    "https://images.unsplash.com/photo-1543286386-713df548e9cc?q=80&w=1600")
-    about_short_in= st.text_area("Short Summary",   key="about_short", height=80)
-    about_long    = st.text_area("Full About Page", "The Digital Landlord Trap…", height=180)
-
-# TAB 3 — MARKETING
-with tabs[2]:
-    top_bar_enabled = st.checkbox("Enable Top Bar")
-    top_bar_text    = st.text_input("Promo Text",  "🔥 50% OFF Launch Sale - Ends Soon!")
-    top_bar_link    = st.text_input("Promo Link",  "#pricing")
-    st.divider()
-    popup_enabled   = st.checkbox("Enable Popup")
-    popup_delay     = st.slider("Popup Delay (s)", 1, 30, 5)
-    popup_title     = st.text_input("Popup Headline", "Wait! Don't leave empty handed.")
-    popup_text      = st.text_input("Popup Body",     "Get our free pricing guide on WhatsApp.")
-    popup_cta       = st.text_input("Popup Button",   "Get it Now")
-
-# TAB 4 — PRICING
-with tabs[3]:
-    cp1, cp2, cp3 = st.columns(3)
-    titan_price = cp1.text_input("Setup Price", "$199")
-    titan_mo    = cp1.text_input("Monthly Fee", "$0")
-    wix_name    = cp2.text_input("Competitor",  "Wix")
-    wix_mo      = cp2.text_input("Comp. Monthly","$29/mo")
-    save_val    = cp3.text_input("Savings",     "$1,466")
-
-# TAB 5 — STORE
-with tabs[4]:
-    st.info("💡 Column F of your CSV can hold a `.glb` URL to enable AR 3D viewing.")
-    sheet_url   = st.text_input("Store CSV URL")
-    custom_feat = st.text_input("Default Product Image", "https://images.unsplash.com/photo-1460925895917-afdab827c52f?q=80&w=800")
-    cpy1, cpy2  = st.columns(2)
-    paypal_link = cpy1.text_input("PayPal Link",  "https://paypal.me/yourid")
-    upi_id      = cpy2.text_input("UPI ID",       "name@upi")
-
-# TAB 6 — BOOKING
-with tabs[5]:
-    booking_title = st.text_input("Section Title",  "Book an Appointment")
-    booking_desc  = st.text_input("Subtext",        "Select a time slot.")
-    booking_embed = st.text_area("Embed Code", height=150, value=(
-        '<!-- Calendly -->\n'
-        '<div class="calendly-inline-widget" data-url="https://calendly.com/demo/30min" style="min-width:320px;height:630px;"></div>\n'
-        '<script src="https://assets.calendly.com/assets/external/widget.js" async></script>'
-    ))
-
-# TAB 7 — BLOG
-with tabs[6]:
-    blog_sheet_url  = st.text_input("Blog CSV URL")
-    blog_hero_title = st.text_input("Blog Section Title", "Latest Insights")
-    blog_hero_sub   = st.text_input("Blog Subtext",       "Thoughts on tech.")
-
-# TAB 8 — LEGAL / CONTENT
-with tabs[7]:
-    testi_data = st.text_area("Testimonials (Name | Quote, one per line)", height=100,
-                              value="Rajesh Gupta | Titan stopped the bleeding.\nSarah Jenkins | Easy updates.")
-    faq_data   = st.text_area("FAQ (Question ? Answer, one per line)", height=100,
-                              value="Do I pay $0 monthly ? Yes, hosting is free.\nIs it secure ? Yes, zero-DB architecture.")
-    priv_txt   = st.text_area("Privacy Policy",    "We collect minimum data.", height=80)
-    term_txt   = st.text_area("Terms of Service",  "You own the code.",        height=80)
-
-
-# ─────────────────────────────────────────────────────────────────
-# 4. PACK ALL WIDGET VALUES INTO SiteConfig
-# ─────────────────────────────────────────────────────────────────
-# This is the ONLY place in app.py that touches SiteConfig fields.
-# Every generator function below receives `cfg` — never raw widget vars.
-
-cfg = SiteConfig(
-    # Identity
-    biz_name=biz_name, biz_tagline=biz_tagline, biz_phone=biz_phone, biz_email=biz_email,
-    biz_addr=biz_addr, prod_url=prod_url, logo_url=logo_url, map_iframe=map_iframe, seo_d=seo_d,
-    # PWA
-    pwa_short=pwa_short, pwa_desc=pwa_desc, pwa_icon=pwa_icon,
-    # Social
-    fb_link=fb_link, ig_link=ig_link, x_link=x_link, li_link=li_link, yt_link=yt_link, wa_num=wa_num,
-    # Theme
-    theme_mode=theme_mode, hero_layout=hero_layout, h_font=h_font, b_font=b_font,
-    col_h=col_h, col_b=col_b, size_h1=size_h1, size_p=size_p,
-    cta_bg_color=cta_bg, cta_txt_color=cta_txt,
-    # Features
-    enable_ar=enable_ar, enable_voice=enable_voice, enable_context=enable_context, enable_ab=enable_ab,
-    # Sections
-    show_hero=show_hero, show_stats=show_stats, show_features=show_features, show_pricing=show_pricing,
-    show_inventory=show_inventory, show_blog=show_blog, show_gallery=show_gallery,
-    show_testimonials=show_testimonials, show_faq=show_faq, show_cta=show_cta, show_booking=show_booking,
-    # SEO
-    seo_area=seo_area, gsc_tag=gsc_tag, ga_tag=ga_tag, og_image=og_image,
-    # Hero
-    hero_h=hero_h, hero_sub=hero_sub, hero_badge_txt=hero_badge_txt, hero_video_id=hero_video_id,
-    hero_img_1=hero_img_1, hero_img_2=hero_img_2, hero_img_3=hero_img_3,
-    # Stats
-    stat_1=stat_1, label_1=label_1, stat_2=stat_2, label_2=label_2, stat_3=stat_3, label_3=label_3,
-    # Features
-    f_title=f_title, feat_data=feat_data_input,
-    # About
-    about_h=about_h_in, about_img=about_img, about_short=about_short_in, about_long=about_long,
-    # Marketing
-    top_bar_enabled=top_bar_enabled, top_bar_text=top_bar_text, top_bar_link=top_bar_link,
-    popup_enabled=popup_enabled, popup_delay=popup_delay, popup_title=popup_title,
-    popup_text=popup_text, popup_cta=popup_cta,
-    # Pricing
-    titan_price=titan_price, titan_mo=titan_mo, wix_name=wix_name, wix_mo=wix_mo, save_val=save_val,
-    # Store
-    sheet_url=sheet_url, custom_feat=custom_feat, paypal_link=paypal_link, upi_id=upi_id,
-    # Booking
-    booking_embed=booking_embed, booking_title=booking_title, booking_desc=booking_desc,
-    # Blog
-    blog_sheet_url=blog_sheet_url, blog_hero_title=blog_hero_title, blog_hero_sub=blog_hero_sub,
-    # Content
-    testi_data=testi_data, faq_data=faq_data, priv_txt=priv_txt, term_txt=term_txt,
-    lang_sheet=lang_sheet, pinata_jwt=pinata_jwt,
-)
-
-
-# ─────────────────────────────────────────────────────────────────
-# 5. PREVIEW & DEPLOY
-# ─────────────────────────────────────────────────────────────────
-
-st.divider()
-st.subheader("🚀 Launchpad")
-
-nav1, nav2 = st.columns([3, 1])
-preview_mode = nav1.radio(
-    "Preview Page:",
-    ["Home", "About", "Contact", "Blog Index", "Blog Post", "Privacy", "Terms", "Product (Demo)", "Booking"],
-    horizontal=True,
-)
-device_mode = nav2.radio("View:", ["💻 Desktop", "📱 Mobile"], horizontal=True)
-
-# Build the correct page based on preview selection
-match preview_mode:
-    case "Home":
-        html_to_render = build_page(cfg, "Home",    assemble_home(cfg))
-    case "About":
-        html_to_render = build_page(cfg, "About",   assemble_inner(cfg, "About",   format_text(cfg.about_long)))
-    case "Contact":
-        html_to_render = build_page(cfg, "Contact", assemble_contact(cfg))
-    case "Privacy":
-        html_to_render = build_page(cfg, "Privacy", assemble_inner(cfg, "Privacy", format_text(cfg.priv_txt)))
-    case "Terms":
-        html_to_render = build_page(cfg, "Terms",   assemble_inner(cfg, "Terms",   format_text(cfg.term_txt)))
-    case "Blog Index":
-        html_to_render = build_page(cfg, "Blog",    templates.gen_blog_index_html(cfg))
-    case "Blog Post":
-        html_to_render = build_page(cfg, "Article", templates.gen_blog_post_html(cfg))
-    case "Product (Demo)":
-        st.info("Demo mode: showing first CSV row.")
-        html_to_render = build_page(cfg, "Product", templates.gen_product_page_content(cfg, is_demo=True))
-    case "Booking":
-        html_to_render = build_page(cfg, "Book Now", templates.gen_booking_content(cfg))
-    case _:
-        html_to_render = build_page(cfg, "Home", assemble_home(cfg))
-
-# Render preview
-preview_col, deploy_col = st.columns([3, 1])
-with preview_col:
-    if device_mode == "📱 Mobile":
-        st.markdown("<div style='text-align:center;color:#888;margin-bottom:8px;'><i>📱 iPhone 14 Pro Simulation</i></div>", unsafe_allow_html=True)
-        _, phone, _ = st.columns([1.2, 1.5, 1.2])
-        with phone:
-            st.markdown("""
-            <style>.phone-bezel{border:14px solid #1a1a1a;border-radius:40px;background:#000;box-shadow:0 25px 50px -12px rgba(0,0,0,0.5);overflow:hidden;margin:0 auto;}</style>
-            <div class="phone-bezel">""", unsafe_allow_html=True)
-            st.components.v1.html(html_to_render, height=750, scrolling=True)
-            st.markdown("</div>", unsafe_allow_html=True)
-    else:
-        st.components.v1.html(html_to_render, height=750, scrolling=True)
-
-with deploy_col:
-    st.success("v55 Architecture compiled.")
-    zip_buf = build_zip(cfg)
-
-    if cfg.pinata_jwt:
-        if st.button("🌌 Push to IPFS", type="primary"):
-            with st.spinner("Uploading to IPFS…"):
-                try:
-                    res = requests.post(
-                        "https://api.pinata.cloud/pinning/pinFileToIPFS",
-                        headers={"Authorization": f"Bearer {cfg.pinata_jwt}"},
-                        files={"file": ("titan_site.zip", zip_buf.getvalue())},
+                if raw is None or raw.empty:
+                    logger.warning(
+                        f"[SCAN-9] {name} ({ticker}): empty download — score 0."
                     )
-                    if res.status_code == 200:
-                        cid = res.json()['IpfsHash']
-                        st.success("Deployed to IPFS!")
-                        st.markdown(f"[ipfs.io/ipfs/{cid}](https://ipfs.io/ipfs/{cid})")
+                    scores[name] = 0.0
+                    continue
+
+                # ── Normalise columns ─────────────────────────────────────
+                if isinstance(raw.columns, pd.MultiIndex):
+                    raw.columns = [str(c[0]).lower() for c in raw.columns]
+                else:
+                    raw.columns = [str(c).lower() for c in raw.columns]
+
+                raw.rename(
+                    columns={"adj close": "close", "adj_close": "close"},
+                    inplace=True,
+                )
+
+                # Ensure required OHLC columns exist
+                for col in ("high", "low", "close"):
+                    if col not in raw.columns:
+                        logger.warning(
+                            f"[SCAN-9] {name}: missing '{col}' column — score 0."
+                        )
+                        scores[name] = 0.0
+                        break
+                    raw[col] = pd.to_numeric(raw[col], errors="coerce").fillna(0.0)
+                else:
+                    # All required columns present — proceed
+                    raw.dropna(subset=["close"], inplace=True)
+
+                    if len(raw) < _ADX_MIN_ROWS:
+                        logger.warning(
+                            f"[SCAN-9] {name}: only {len(raw)} rows after "
+                            f"cleaning (need ≥ {_ADX_MIN_ROWS}) — score 0."
+                        )
+                        scores[name] = 0.0
+                        continue
+
+                    adx_series = ADXIndicator(
+                        high   = raw["high"].astype(float),
+                        low    = raw["low"].astype(float),
+                        close  = raw["close"].astype(float),
+                        window = _ADX_WINDOW,
+                    ).adx()
+
+                    adx_value = float(adx_series.iloc[-1])
+
+                    # Guard against NaN (can happen if series is too short)
+                    if pd.isna(adx_value):
+                        logger.warning(
+                            f"[SCAN-9] {name}: ADX is NaN — score 0."
+                        )
+                        scores[name] = 0.0
                     else:
-                        st.error(f"IPFS error: {res.text}")
-                except Exception as e:
-                    st.error(f"Upload failed: {e}")
-    else:
-        st.download_button(
-            "📥 Download 2050 Package",
-            zip_buf.getvalue(),
-            f"{cfg.biz_name.lower().replace(' ', '_')}_apex.zip",
-            "application/zip",
-            type="primary",
+                        scores[name] = round(adx_value, 2)
+                        logger.info(
+                            f"[SCAN-9] {name} ({ticker}): "
+                            f"ADX = {adx_value:.1f} | rows = {len(raw)}"
+                        )
+
+            except Exception as exc:
+                # Individual index failure is non-fatal
+                logger.warning(
+                    f"[SCAN-9] {name} ({ticker}): download/compute failed "
+                    f"— {exc}. Score set to 0."
+                )
+                scores[name] = 0.0
+
+        return scores
+
+    # ══════════════════════════════════════════════════════════════════════
+    #  EXISTING SCAN METHODS — UNCHANGED from v9.0
+    # ══════════════════════════════════════════════════════════════════════
+
+    async def scan_market(self) -> tuple[list, list]:
+        """
+        [SCAN-7] Async entry point. Runs blocking stock scan in thread pool.
+
+        Returns:
+            (bullish_picks, bearish_picks) — plain lists of dicts,
+            each containing: symbol, price, adx, rsi, vol_spike.
+        """
+        logger.info(
+            f"🔍 Morning Market Scan starting | "
+            f"{len(self.symbols)} symbols | "
+            f"{datetime.now().strftime('%d-%b-%Y %H:%M IST')}"
         )
+        return await asyncio.to_thread(self._run_scan_sync)
+
+    def _run_scan_sync(self) -> tuple[list, list]:
+        """
+        Downloads data for all symbols, computes indicators,
+        applies institutional filter criteria, and returns ranked picks.
+        """
+        bullish_picks = []
+        bearish_picks = []
+
+        logger.info(
+            f"Downloading {len(self.symbols)} symbols | "
+            f"period={DATA_PERIOD} interval={DATA_INTERVAL}"
+        )
+        try:
+            raw_data = yf.download(
+                self.symbols,
+                period   = DATA_PERIOD,
+                interval = DATA_INTERVAL,
+                group_by = "ticker",
+                progress = False,
+                threads  = True,
+            )
+        except Exception as exc:
+            logger.error(f"Bulk download failed: {exc}")
+            return [], []
+
+        for symbol in self.symbols:
+            try:
+                result = self._analyse_symbol(symbol, raw_data)
+                if result is None:
+                    continue
+                if result["direction"] == "BULL":
+                    bullish_picks.append(result["data"])
+                elif result["direction"] == "BEAR":
+                    bearish_picks.append(result["data"])
+            except Exception as exc:
+                logger.debug(f"Symbol {symbol} analysis failed: {exc}")
+                continue
+
+        bullish_picks = sorted(
+            bullish_picks, key=lambda x: x["adx"], reverse=True
+        )[:TOP_N_RESULTS]
+
+        bearish_picks = sorted(
+            bearish_picks, key=lambda x: x["adx"], reverse=True
+        )[:TOP_N_RESULTS]
+
+        logger.info(
+            f"✅ Scan complete | "
+            f"Bullish: {len(bullish_picks)} | Bearish: {len(bearish_picks)}"
+        )
+        return bullish_picks, bearish_picks
+
+    def _analyse_symbol(self, symbol: str, raw_data) -> dict | None:
+        """
+        Computes indicators for a single symbol and applies filters.
+        Returns {"direction": "BULL"|"BEAR", "data": {...}} or None.
+        """
+        try:
+            if isinstance(raw_data.columns, pd.MultiIndex):
+                df = raw_data[symbol].dropna()
+            else:
+                df = raw_data.dropna()
+        except (KeyError, TypeError):
+            return None
+
+        if len(df) < 30:
+            return None
+
+        required = {"Close", "High", "Low", "Volume"}
+        if not required.issubset(set(df.columns)):
+            return None
+
+        close = df["Close"].squeeze()
+        high  = df["High"].squeeze()
+        low   = df["Low"].squeeze()
+
+        ema_9   = EMAIndicator(close=close, window=9).ema_indicator().iloc[-1]
+        ema_21  = EMAIndicator(close=close, window=21).ema_indicator().iloc[-1]
+        ema_200 = EMAIndicator(
+            close=close, window=min(200, len(df) - 1)
+        ).ema_indicator().iloc[-1]
+
+        rsi = RSIIndicator(close=close, window=14).rsi().iloc[-1]
+
+        adx = ADXIndicator(
+            high=high, low=low, close=close, window=_ADX_WINDOW
+        ).adx().iloc[-1]
+
+        avg_vol   = df["Volume"].rolling(window=10).mean().iloc[-1]
+        curr_vol  = df["Volume"].iloc[-1]
+        vol_spike = float(curr_vol / avg_vol) if avg_vol > 0 else 0.0
+
+        curr_price = float(close.iloc[-1])
+        clean_sym  = symbol.replace(".NS", "")
+
+        payload = {
+            "symbol":    clean_sym,
+            "price":     round(curr_price, 2),
+            "adx":       round(float(adx),       1),
+            "rsi":       round(float(rsi),        1),
+            "vol_spike": round(vol_spike,          2),
+            "ema_9":     round(float(ema_9),       2),
+            "ema_21":    round(float(ema_21),      2),
+            "ema_200":   round(float(ema_200),     2),
+        }
+
+        # [SCAN-2] Bullish filter
+        is_bullish = (
+            curr_price > ema_200
+            and float(adx)       >= BULL_ADX_MIN
+            and float(rsi)       >= BULL_RSI_MIN
+            and vol_spike        >= BULL_VOL_SPIKE
+            and ema_9            > ema_21
+        )
+
+        # [SCAN-2] Bearish filter
+        is_bearish = (
+            curr_price < ema_200
+            and float(adx)  >= BEAR_ADX_MIN
+            and float(rsi)  <= BEAR_RSI_MAX
+            and vol_spike   >= BEAR_VOL_SPIKE
+            and ema_9       < ema_21
+        )
+
+        if is_bullish:
+            return {"direction": "BULL", "data": payload}
+        if is_bearish:
+            return {"direction": "BEAR", "data": payload}
+
+        return None
+
+    def format_report(self, bullish: list, bearish: list) -> str:
+        """
+        [SCAN-5] Formats scan results as HTML for Telegram.
+        UNCHANGED from v9.0.
+        """
+        date_str = datetime.now().strftime("%d %b %Y")
+        report   = (
+            f"🐅 <b>QuantBengal Morning Scan</b>\n"
+            f"📅 {date_str}\n"
+            f"Filters: ADX≥25 | Vol≥1.5× | EMA Confluence\n"
+            "━━━━━━━━━━━━━━━━━━━━━━━\n\n"
+        )
+
+        report += "🔥 <b>BULLISH SETUPS</b>\n"
+        if not bullish:
+            report += "• No high-conviction bullish setups today\n"
+        else:
+            for p in bullish:
+                report += (
+                    f"• <b>{p['symbol']}</b> ₹{p['price']:,.1f} "
+                    f"| ADX:{p['adx']:.0f} RSI:{p['rsi']:.0f} "
+                    f"Vol:{p['vol_spike']:.1f}×\n"
+                )
+
+        report += "\n❄️ <b>BEARISH SETUPS</b>\n"
+        if not bearish:
+            report += "• No high-conviction bearish setups today\n"
+        else:
+            for p in bearish:
+                report += (
+                    f"• <b>{p['symbol']}</b> ₹{p['price']:,.1f} "
+                    f"| ADX:{p['adx']:.0f} RSI:{p['rsi']:.0f} "
+                    f"Vol:{p['vol_spike']:.1f}×\n"
+                )
+
+        report += (
+            "\n<i>These are informational setups only.\n"
+            "All trades are executed by the automated engine.</i>"
+        )
+        return report
