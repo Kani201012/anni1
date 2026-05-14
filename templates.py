@@ -471,13 +471,16 @@ def gen_stats(cfg: 'SiteConfig') -> str:
 
 def gen_features(cfg: 'SiteConfig') -> str:
     """
-    v56 CHANGE: Renders features as bento-grid cards using the CSS
-    defined in titan_themes.py. The .bento-card class replaces the
-    legacy .card approach so nth-child spanning rules apply correctly.
+    v57 UPGRADE: Premium bento grid with:
+    - Numbered step badges on each card
+    - Gradient icon backgrounds that shift on hover
+    - Animated underline accent on card title
+    - Subtle noise texture overlay on the section background
+    - Tag chip showing the pillar category extracted from title
     """
     cards = ""
     feature_lines = [l for l in cfg.feat_data.split('\n') if '|' in l]
-    for line in feature_lines:
+    for idx, line in enumerate(feature_lines):
         parts = line.split('|')
         if len(parts) < 3:
             continue
@@ -486,30 +489,42 @@ def gen_features(cfg: 'SiteConfig') -> str:
         desc_raw  = parts[2].strip()
 
         title_safe = sanitize(title_raw)
-        # Apply bold formatting AFTER sanitizing, so ** markers survive
-        desc_safe  = re.sub(
-            r'\*\*(.*?)\*\*',
-            r'<strong>\1</strong>',
-            sanitize(desc_raw),
-        )
+        desc_safe  = re.sub(r'\*\*(.*?)\*\*', r'<strong>\1</strong>', sanitize(desc_raw))
+        card_num   = str(idx + 1).zfill(2)
+
+        # Extract short tag from title (word before first space after "The")
+        tag_match = re.search(r'The (\w+)', title_raw)
+        tag_text  = tag_match.group(1) if tag_match else title_raw.split()[0] if title_raw else ''
+
         cards += f"""
-<div class="bento-card reveal" role="article">
-    <div class="bento-icon" aria-hidden="true">{get_simple_icon(icon_name)}</div>
-    <div class="bento-body">
-        <h3>{title_safe}</h3>
-        <p>{desc_safe}</p>
+<div class="bento-card reveal" role="article" data-index="{card_num}">
+    <div class="bento-card-glow" aria-hidden="true"></div>
+    <div class="bento-top-row">
+        <div class="bento-icon" aria-hidden="true">{get_simple_icon(icon_name)}</div>
+        <div class="bento-meta">
+            <span class="bento-num">{card_num}</span>
+            <span class="bento-tag">{sanitize(tag_text)}</span>
+        </div>
     </div>
+    <div class="bento-body">
+        <h3 class="bento-title">{title_safe}</h3>
+        <p class="bento-desc">{desc_safe}</p>
+    </div>
+    <div class="bento-card-line" aria-hidden="true"></div>
 </div>"""
 
     if not cards:
         return ""
 
     return f"""
-<section id="features" aria-labelledby="features-heading">
+<section id="features" aria-labelledby="features-heading" class="features-section">
+    <div class="features-bg-grid" aria-hidden="true"></div>
     <div class="container">
         <div class="section-head reveal">
+            <p class="section-eyebrow">Why Titan</p>
             <h2 id="features-heading">{sanitize(cfg.f_title)}</h2>
             <div class="section-rule" aria-hidden="true"></div>
+            <p class="section-subtitle">Six engineering pillars. Zero compromises.</p>
         </div>
         <div class="bento-grid">{cards}</div>
     </div>
@@ -734,7 +749,74 @@ def _gen_inventory_js(sheet_url_js: str, custom_img_js: str, wa_num_js: str, biz
         }}
     }}
 
-    document.addEventListener('DOMContentLoaded', loadInventory);
+    // Robust load: wait for runtime (parseCSVLine) then fetch with CORS proxy fallback
+    function waitForRuntime(cb, n) {{
+        if (typeof parseCSVLine === 'function') {{ cb(); return; }}
+        if ((n || 0) > 40) {{ return; }}
+        setTimeout(function() {{ waitForRuntime(cb, (n || 0) + 1); }}, 80);
+    }}
+
+    // CORS proxy chain — try direct, then allorigins.win fallback
+    async function fetchCSV(url) {{
+        var target = url;
+        if (url.indexOf('docs.google.com/spreadsheets') !== -1) {{
+            // Normalise to CSV export URL — strip everything after /d/{ID}
+            var parts = target.split('/d/');
+            if (parts.length >= 2) {{
+                var sheetId = parts[1].split('/')[0];
+                target = 'https://docs.google.com/spreadsheets/d/' + sheetId + '/export?format=csv';
+            }}
+            if (target.indexOf('export?format=csv') === -1) {{
+                if (target.charAt(target.length - 1) === '/') {{ target = target.slice(0, -1); }} target = target + '/export?format=csv';
+            }}
+        }}
+        try {{
+            var r = await fetch(target, {{ cache: 'no-store' }});
+            if (r.ok) return r.text();
+        }} catch(e) {{}}
+        // Proxy fallback for CORS-restricted environments
+        var proxy = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(target);
+        var r2 = await fetch(proxy, {{ cache: 'no-store' }});
+        if (r2.ok) return r2.text();
+        throw new Error('Cannot fetch: ' + target);
+    }}
+
+    async function loadInventoryWithProxy() {{
+        var grid = document.getElementById('inv-grid');
+        if (!grid) return;
+        if (!SHEET_URL) {{
+            grid.innerHTML = '<div style="text-align:center;padding:3rem;opacity:0.5;"><p>Connect a Google Sheet to populate your store.</p></div>';
+            return;
+        }}
+        try {{
+            var txt = await fetchCSV(SHEET_URL);
+            var lines = txt.split(/\r?\n/).filter(function(l) {{ return l.trim(); }});
+            allProducts = [];
+            for (var i = 1; i < lines.length; i++) {{
+                var c = parseCSVLine(lines[i]);
+                if (c.length < 2 || !c[0]) continue;
+                var imgList = c[3] ? c[3].split('|').map(function(s) {{ return s.trim(); }}).filter(Boolean) : [];
+                var category = (c[6] || 'General').trim();
+                categories.add(category);
+                allProducts.push({{
+                    name:     c[0] || '',
+                    price:    c[1] || '',
+                    desc:     c[2] || '',
+                    imgs:     imgList.length ? imgList : [DEFAULT_IMG],
+                    payment:  c[4] || '',
+                    model:    c[5] || '',
+                    category: category,
+                }});
+            }}
+            buildFilters();
+            renderProducts(allProducts);
+        }} catch(err) {{
+            console.error('[Titan] Store load error:', err);
+            grid.innerHTML = '<p style="text-align:center;padding:2rem;color:#ef4444;">Could not load store data. Ensure your Google Sheet is published: File > Share > Publish to web > CSV format.</p>';
+        }}
+    }}
+
+    document.addEventListener('DOMContentLoaded', function() {{ waitForRuntime(loadInventoryWithProxy); }});
 }})();
 </script>"""
 
@@ -882,18 +964,42 @@ def gen_cta(cfg: 'SiteConfig') -> str:
 def gen_footer(cfg: 'SiteConfig') -> str:
     import datetime
     icons = ""
-    social = [
-        (cfg.fb_link, "Facebook",  "M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"),
-        (cfg.ig_link, "Instagram", "M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zm0-2.163c-3.259 0-3.667.014-4.947.072-4.358.2-6.78 2.618-6.98 6.98-.059 1.281-.073 1.689-.073 4.948 0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98 1.281.058 1.689.072 4.948.072 3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98-1.281-.059-1.69-.073-4.949-.073zm0 5.838c-3.403 0-6.162 2.759-6.162 6.162s2.759 6.163 6.162 6.163 6.162-2.759 6.162-6.163c0-3.403-2.759-6.162-6.162-6.162zm0 10.162c-2.209 0-4-1.79-4-4 0-2.209 1.791-4 4-4s4 1.791 4 4c0 2.21-1.791 4-4 4zm6.406-11.845c-.796 0-1.441.645-1.441 1.44s.645 1.44 1.441 1.44c.795 0 1.439-.645 1.439-1.44s-.644-1.44-1.439-1.44z"),
-        (cfg.x_link,  "X (Twitter)", "M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"),
-        (cfg.li_link, "LinkedIn",  "M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"),
+    # Each tuple: (url, brand_label, svg_color, svg_markup)
+    # Using multi-path SVGs where needed (YouTube, WhatsApp, Instagram)
+    social_defs = [
+        (
+            cfg.fb_link, "Facebook", "#1877F2",
+            '<path d="M24 12.073c0-6.627-5.373-12-12-12s-12 5.373-12 12c0 5.99 4.388 10.954 10.125 11.854v-8.385H7.078v-3.47h3.047V9.43c0-3.007 1.792-4.669 4.533-4.669 1.312 0 2.686.235 2.686.235v2.953H15.83c-1.491 0-1.956.925-1.956 1.874v2.25h3.328l-.532 3.47h-2.796v8.385C19.612 23.027 24 18.062 24 12.073z"/>',
+        ),
+        (
+            cfg.ig_link, "Instagram", "url(#ig-grad)",
+            '<defs><linearGradient id="ig-grad" x1="0%" y1="100%" x2="100%" y2="0%"><stop offset="0%" stop-color="#f09433"/><stop offset="25%" stop-color="#e6683c"/><stop offset="50%" stop-color="#dc2743"/><stop offset="75%" stop-color="#cc2366"/><stop offset="100%" stop-color="#bc1888"/></linearGradient></defs><path d="M12 2.163c3.204 0 3.584.012 4.85.07 3.252.148 4.771 1.691 4.919 4.919.058 1.265.069 1.645.069 4.849 0 3.205-.012 3.584-.069 4.849-.149 3.225-1.664 4.771-4.919 4.919-1.266.058-1.644.07-4.85.07-3.204 0-3.584-.012-4.849-.07-3.26-.149-4.771-1.699-4.919-4.92-.058-1.265-.07-1.644-.07-4.849 0-3.204.013-3.583.07-4.849.149-3.227 1.664-4.771 4.919-4.919 1.266-.057 1.645-.069 4.849-.069zM12 0C8.741 0 8.333.014 7.053.072 2.695.272.273 2.69.073 7.052.014 8.333 0 8.741 0 12c0 3.259.014 3.668.072 4.948.2 4.358 2.618 6.78 6.98 6.98C8.333 23.986 8.741 24 12 24c3.259 0 3.668-.014 4.948-.072 4.354-.2 6.782-2.618 6.979-6.98.059-1.28.073-1.689.073-4.948 0-3.259-.014-3.667-.072-4.947-.196-4.354-2.617-6.78-6.979-6.98C15.668.014 15.259 0 12 0zm0 5.838a6.162 6.162 0 100 12.324 6.162 6.162 0 000-12.324zM12 16a4 4 0 110-8 4 4 0 010 8zm6.406-11.845a1.44 1.44 0 100 2.881 1.44 1.44 0 000-2.881z"/>',
+        ),
+        (
+            cfg.x_link, "X (Twitter)", "#000000",
+            '<path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"/>',
+        ),
+        (
+            cfg.li_link, "LinkedIn", "#0A66C2",
+            '<path d="M20.447 20.452h-3.554v-5.569c0-1.328-.027-3.037-1.852-3.037-1.853 0-2.136 1.445-2.136 2.939v5.667H9.351V9h3.414v1.561h.046c.477-.9 1.637-1.85 3.37-1.85 3.601 0 4.267 2.37 4.267 5.455v6.286zM5.337 7.433c-1.144 0-2.063-.926-2.063-2.065 0-1.138.92-2.063 2.063-2.063 1.14 0 2.064.925 2.064 2.063 0 1.139-.925 2.065-2.064 2.065zm1.782 13.019H3.555V9h3.564v11.452zM22.225 0H1.771C.792 0 0 .774 0 1.729v20.542C0 23.227.792 24 1.771 24h20.451C23.2 24 24 23.227 24 22.271V1.729C24 .774 23.2 0 22.222 0h.003z"/>',
+        ),
+        (
+            cfg.yt_link, "YouTube", "#FF0000",
+            '<path d="M23.495 6.205a3.007 3.007 0 00-2.088-2.088c-1.87-.501-9.396-.501-9.396-.501s-7.507-.01-9.396.501A3.007 3.007 0 00.527 6.205a31.247 31.247 0 00-.522 5.805 31.247 31.247 0 00.522 5.783 3.007 3.007 0 002.088 2.088c1.868.502 9.396.502 9.396.502s7.506 0 9.396-.502a3.007 3.007 0 002.088-2.088 31.247 31.247 0 00.5-5.783 31.247 31.247 0 00-.5-5.805zM9.609 15.601V8.408l6.264 3.602z"/>',
+        ),
+        (
+            cfg.wa_num and f"https://wa.me/{clean_phone(cfg.wa_num)}", "WhatsApp", "#25D366",
+            '<path d="M17.472 14.382c-.297-.149-1.758-.867-2.03-.967-.273-.099-.471-.148-.67.15-.197.297-.767.966-.94 1.164-.173.199-.347.223-.644.075-.297-.15-1.255-.463-2.39-1.475-.883-.788-1.48-1.761-1.653-2.059-.173-.297-.018-.458.13-.606.134-.133.298-.347.446-.52.149-.174.198-.298.298-.497.099-.198.05-.371-.025-.52-.075-.149-.669-1.612-.916-2.207-.242-.579-.487-.5-.669-.51-.173-.008-.371-.01-.57-.01-.198 0-.52.074-.792.372-.272.297-1.04 1.016-1.04 2.479 0 1.462 1.065 2.875 1.213 3.074.149.198 2.096 3.2 5.077 4.487.709.306 1.262.489 1.694.625.712.227 1.36.195 1.871.118.571-.085 1.758-.719 2.006-1.413.248-.694.248-1.289.173-1.413-.074-.124-.272-.198-.57-.347m-5.421 7.403h-.004a9.87 9.87 0 01-5.031-1.378l-.361-.214-3.741.982.998-3.648-.235-.374a9.86 9.86 0 01-1.51-5.26c.001-5.45 4.436-9.884 9.888-9.884 2.64 0 5.122 1.03 6.988 2.898a9.825 9.825 0 012.893 6.994c-.003 5.45-4.437 9.884-9.885 9.884m8.413-18.297A11.815 11.815 0 0012.05 0C5.495 0 .16 5.335.157 11.892c0 2.096.547 4.142 1.588 5.945L.057 24l6.305-1.654a11.882 11.882 0 005.683 1.448h.005c6.554 0 11.89-5.335 11.893-11.893a11.821 11.821 0 00-3.48-8.413z"/>',
+        ),
     ]
-    for link, label, path in social:
+
+    for link, label, brand_color, svg_inner in social_defs:
         if link:
             icons += (
-                f'<a href="{sanitize_url(link)}" target="_blank" rel="noopener noreferrer"'
-                f' aria-label="{label}" class="social-link">'
-                f'<svg class="social-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="{path}"/></svg>'
+                f'<a href="{sanitize_url(str(link))}" target="_blank" rel="noopener noreferrer"'
+                f' aria-label="{label}" class="social-link social-link--{label.lower().replace(" ","-")}"'
+                f' style="--brand:{brand_color}">'
+                f'<svg class="social-icon" viewBox="0 0 24 24" aria-hidden="true">{svg_inner}</svg>'
                 f'</a>'
             )
 
@@ -1127,6 +1233,7 @@ def gen_wa_widget(cfg: 'SiteConfig') -> str:
     if not cfg.wa_num:
         return ""
     clean_wa = clean_phone(cfg.wa_num)
+    # Full WhatsApp SVG with bubble + phone paths for crisp rendering at all sizes
     return f"""
 <a href="https://wa.me/{clean_wa}"
    target="_blank"
@@ -1134,10 +1241,10 @@ def gen_wa_widget(cfg: 'SiteConfig') -> str:
    id="wa-widget"
    aria-label="Chat with us on WhatsApp"
    class="wa-float-btn">
-    <svg viewBox="0 0 24 24" fill="white" width="30" height="30" aria-hidden="true">
-        <path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91 0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21 5.46 0 9.91-4.45 9.91-9.91 0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2z"/>
+    <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 448 512" width="28" height="28" aria-hidden="true" style="display:block;">
+        <path fill="#ffffff" d="M380.9 97.1C339 55.1 283.2 32 223.9 32c-122.4 0-222 99.6-222 222 0 39.1 10.2 77.3 29.6 111L0 480l117.7-30.9c32.4 17.7 68.9 27 106.1 27h.1c122.3 0 224.1-99.6 224.1-222 0-59.3-23.1-115-65.1-157zm-157 341.6c-33.2 0-65.7-8.9-94-25.7l-6.7-4-69.8 18.3L72 359.2l-4.4-7c-18.5-29.4-28.2-63.3-28.2-98.2 0-101.7 82.8-184.5 184.6-184.5 49.3 0 95.6 19.2 130.4 54.1 34.8 34.9 56.2 81.2 56.1 130.5 0 101.8-84.9 184.6-186.6 184.6zm101.2-138.2c-5.5-2.8-32.8-16.2-37.9-18-5.1-1.9-8.8-2.8-12.5 2.8-3.7 5.6-14.3 18-17.6 21.8-3.2 3.7-6.5 4.2-12 1.4-32.6-16.3-54-29.1-75.5-66-5.7-9.8 5.7-9.1 16.3-30.3 1.8-3.7.9-6.9-.5-9.7-1.4-2.8-12.5-30.1-17.1-41.2-4.5-10.8-9.1-9.3-12.5-9.5-3.2-.2-6.9-.2-10.6-.2-3.7 0-9.7 1.4-14.8 6.9-5.1 5.6-19.4 19-19.4 46.3 0 27.3 19.9 53.7 22.6 57.4 2.8 3.7 39.1 59.7 94.8 83.8 35.2 15.2 49 16.5 66.6 13.9 10.7-1.6 32.8-13.4 37.4-26.4 4.6-13 4.6-24.1 3.2-26.4-1.3-2.5-5-3.9-10.5-6.6z"/>
     </svg>
-    <span class="wa-label">Chat</span>
+    <span class="wa-label">WhatsApp</span>
 </a>"""
 
 
@@ -1510,7 +1617,69 @@ def gen_blog_index_html(cfg: 'SiteConfig') -> str:
             if (box) box.innerHTML = '<p class="error-msg">Failed to load posts.</p>';
         }}
     }}
-    document.addEventListener('DOMContentLoaded', loadBlog);
+    // Robust CSV fetch with CORS proxy fallback
+    async function fetchCSV(url) {{
+        var target = url;
+        if (url.indexOf('docs.google.com/spreadsheets') !== -1) {{
+            // Normalise to CSV export URL — strip everything after /d/{ID}
+            var parts = target.split('/d/');
+            if (parts.length >= 2) {{
+                var sheetId = parts[1].split('/')[0];
+                target = 'https://docs.google.com/spreadsheets/d/' + sheetId + '/export?format=csv';
+            }}
+            if (target.indexOf('export?format=csv') === -1) {{
+                if (target.charAt(target.length - 1) === '/') {{ target = target.slice(0, -1); }} target = target + '/export?format=csv';
+            }}
+        }}
+        try {{
+            var r = await fetch(target, {{ cache: 'no-store' }});
+            if (r.ok) return r.text();
+        }} catch(e) {{}}
+        var proxy = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(target);
+        var r2 = await fetch(proxy, {{ cache: 'no-store' }});
+        if (r2.ok) return r2.text();
+        throw new Error('Cannot fetch: ' + target);
+    }}
+    function waitForRuntime(cb, n) {{
+        if (typeof parseCSVLine === 'function') {{ cb(); return; }}
+        if ((n || 0) > 40) return;
+        setTimeout(function() {{ waitForRuntime(cb, (n || 0) + 1); }}, 80);
+    }}
+    document.addEventListener('DOMContentLoaded', function() {{
+        waitForRuntime(async function() {{
+            var box = document.getElementById('blog-grid');
+            if (!box || !SHEET) {{
+                if (box) box.innerHTML = '<p style="text-align:center;padding:2rem;opacity:0.5;">Connect a Google Sheet to populate your blog.</p>';
+                return;
+            }}
+            try {{
+                var txt = await fetchCSV(SHEET);
+                var lines = txt.split(/\r?\n/).filter(function(l) {{ return l.trim(); }});
+                box.innerHTML = '';
+                for (var i = 1; i < lines.length; i++) {{
+                    var r = parseCSVLine(lines[i]);
+                    if (r.length < 5 || !r[0]) continue;
+                    var imgSrc = r[5] || DEFAULT_IMG_BLOG;
+                    var article = document.createElement('article');
+                    article.className = 'card reveal';
+                    article.setAttribute('role', 'listitem');
+                    article.innerHTML = [
+                        '<img src="' + imgSrc + '" style="width:100%;height:220px;object-fit:cover;" loading="lazy" alt="' + r[1] + '">',
+                        '<div class="card-body">',
+                        '  <span class="blog-category">' + (r[3] || 'General') + '</span>',
+                        '  <h3><a href="post.html?id=' + encodeURIComponent(r[0]) + '" class="blog-title-link">' + r[1] + '</a></h3>',
+                        '  <p class="card-desc">' + (r[4] || '') + '</p>',
+                        '  <a href="post.html?id=' + encodeURIComponent(r[0]) + '" class="btn btn-primary blog-read-btn">Read Article &#8594;</a>',
+                        '</div>',
+                    ].join('\n');
+                    box.appendChild(article);
+                }}
+            }} catch(err) {{
+                console.error('[Titan] Blog load error:', err);
+                if (box) box.innerHTML = '<p style="text-align:center;padding:2rem;color:#ef4444;">Could not load blog posts. Publish your Google Sheet: File > Share > Publish to web > CSV format.</p>';
+            }}
+        }});
+    }});
 }})();
 </script>"""
 
@@ -1568,7 +1737,34 @@ def gen_blog_post_html(cfg: 'SiteConfig') -> str:
             container.innerHTML = '<div class="container"><p class="error-msg">Failed to load article.</p></div>';
         }}
     }}
-    document.addEventListener('DOMContentLoaded', loadPost);
+    async function fetchCSV(url) {{
+        var target = url;
+        if (url.indexOf('docs.google.com/spreadsheets') !== -1) {{
+            // Normalise to CSV export URL — strip everything after /d/{ID}
+            var parts = target.split('/d/');
+            if (parts.length >= 2) {{
+                var sheetId = parts[1].split('/')[0];
+                target = 'https://docs.google.com/spreadsheets/d/' + sheetId + '/export?format=csv';
+            }}
+            if (target.indexOf('export?format=csv') === -1) {{
+                if (target.charAt(target.length - 1) === '/') {{ target = target.slice(0, -1); }} target = target + '/export?format=csv';
+            }}
+        }}
+        try {{
+            var r = await fetch(target, {{ cache: 'no-store' }});
+            if (r.ok) return r.text();
+        }} catch(e) {{}}
+        var proxy = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(target);
+        var r2 = await fetch(proxy, {{ cache: 'no-store' }});
+        if (r2.ok) return r2.text();
+        throw new Error('Cannot fetch: ' + target);
+    }}
+    function waitForRuntime(cb, n) {{
+        if (typeof parseCSVLine === 'function') {{ cb(); return; }}
+        if ((n || 0) > 40) return;
+        setTimeout(function() {{ waitForRuntime(cb, (n || 0) + 1); }}, 80);
+    }}
+    document.addEventListener('DOMContentLoaded', function() {{ waitForRuntime(loadPost); }});
 }})();
 </script>"""
 
