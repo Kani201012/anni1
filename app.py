@@ -345,20 +345,26 @@ def _sidebar_features_sections() -> dict:
 def _sidebar_seo_deploy() -> dict:
     """SEO, analytics, and IPFS deployment expander."""
     with st.expander("⚙️ SEO, Analytics & Deploy", expanded=False):
-        seo_area   = st.text_input("Service Area / Location", "Global / Online", key="sb_seo_area")
-        gsc_tag    = st.text_input("Google Search Console ID", key="sb_gsc",
-                                   placeholder="google-site-verification=xxx")
-        ga_tag     = st.text_input("Google Analytics ID", key="sb_ga",
+        seo_area   = st.text_input("Service Area / Location", "Global / Online", key="sb_seo_area",
+                                   placeholder="New York, USA")
+        seo_kw     = st.text_input("SEO Keywords", "web design, no monthly fees", key="sb_seo_kw",
+                                   placeholder="keyword1, keyword2, keyword3",
+                                   help="Comma-separated keywords injected into <meta name=\'keywords\'>. "
+                                        "Use your main service + location terms.")
+        gsc_tag    = st.text_input("Google Search Console Verification ID", key="sb_gsc",
+                                   placeholder="google-site-verification=XXXXXXXXXX")
+        ga_tag     = st.text_input("Google Analytics 4 Measurement ID", key="sb_ga",
                                    placeholder="G-XXXXXXXXXX")
-        og_image   = st.text_input("Social Share Image URL", key="sb_og",
-                                   placeholder="https://…/og-image.jpg")
+        og_image   = st.text_input("Social Share (OG) Image URL", key="sb_og",
+                                   placeholder="https://yourdomain.com/og-image.jpg",
+                                   help="1200×630px image shown when shared on LinkedIn, WhatsApp, Twitter.")
         st.divider()
-        st.markdown("**IPFS Deployment**")
-        pinata_jwt = st.text_input("Pinata JWT", type="password", key="sb_pinata",
-                                   help="Leave blank to use ZIP download instead.")
+        st.markdown("**🌌 IPFS Deployment**")
+        pinata_jwt = st.text_input("Pinata JWT Token", type="password", key="sb_pinata",
+                                   help="Leave blank to download as ZIP instead. Get your JWT from app.pinata.cloud.")
 
     return dict(
-        seo_area=seo_area, gsc_tag=gsc_tag, ga_tag=ga_tag,
+        seo_area=seo_area, seo_kw=seo_kw, gsc_tag=gsc_tag, ga_tag=ga_tag,
         og_image=og_image, pinata_jwt=pinata_jwt,
     )
 
