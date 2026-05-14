@@ -426,7 +426,8 @@ def build_page(cfg: SiteConfig, title: str, content: str) -> str:
         f'<meta name="theme-color" content="#000000">'
         + (f'<link rel="apple-touch-icon" href="{sanitize_url(cfg.pwa_icon)}">' if cfg.pwa_icon else '')
     )
-    canonical = f'<link rel="canonical" href="{sanitize_url(cfg.prod_url)}/">'
+    seo_kw_meta = f'<meta name="keywords" content="{sanitize(cfg.seo_kw)}">' if cfg.seo_kw else ""
+    canonical = f'<link rel="canonical" href="{sanitize_url(cfg.prod_url)}/">'  
     dns_prefetch = (
         '<link rel="dns-prefetch" href="https://fonts.googleapis.com">'
         '<link rel="dns-prefetch" href="https://fonts.gstatic.com">'
@@ -467,6 +468,7 @@ if ('serviceWorker' in navigator) {
     <title>{sanitize(title)} | {sanitize(cfg.biz_name)}</title>
     <meta name="description" content="{sanitize(cfg.seo_d)}">
     {gsc_meta}
+    {seo_kw_meta}
     {og_meta}
     {pwa_tags}
     {canonical}
