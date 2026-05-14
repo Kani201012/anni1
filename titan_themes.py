@@ -335,7 +335,79 @@ def _bento_grid_css(theme_name: str, radius: str) -> str:
         grid-column:    1 / -1;
         flex-direction: column;
     }}
-}}"""
+}}
+
+    /* ── PREMIUM BENTO ENHANCEMENTS ──────────────────────── */
+    .features-section {{ background: var(--bg); position: relative; overflow: hidden; }}
+    .features-bg-grid {{
+        position: absolute; inset: 0; pointer-events: none; z-index: 0;
+        background-image:
+            linear-gradient(rgba(128,128,128,0.045) 1px, transparent 1px),
+            linear-gradient(90deg, rgba(128,128,128,0.045) 1px, transparent 1px);
+        background-size: 60px 60px;
+    }}
+    .features-section .container {{ position: relative; z-index: 1; }}
+    .section-eyebrow {{
+        display: inline-block; padding: 0.3rem 1rem;
+        background: var(--p-alpha); color: var(--p); border-radius: 50px;
+        font-size: 0.75rem; font-weight: 800; text-transform: uppercase; letter-spacing: 2px;
+        margin-bottom: 0.75rem;
+    }}
+    .bento-card-glow {{
+        position: absolute; top: -60px; right: -60px; width: 180px; height: 180px;
+        background: radial-gradient(circle, var(--p-alpha) 0%, transparent 70%);
+        border-radius: 50%; pointer-events: none; opacity: 0;
+        transition: opacity 0.4s ease, transform 0.4s ease; z-index: 0;
+    }}
+    .bento-card:hover .bento-card-glow {{ opacity: 1; transform: scale(1.4); }}
+    .bento-top-row {{
+        display: flex; align-items: flex-start; justify-content: space-between;
+        margin-bottom: 0.5rem; position: relative; z-index: 1;
+    }}
+    .bento-meta {{ display: flex; flex-direction: column; align-items: flex-end; gap: 4px; }}
+    .bento-num {{
+        font-family: var(--h-font); font-size: clamp(1.8rem,2.5vw,2.4rem);
+        font-weight: 900; line-height: 1; color: var(--p); opacity: 0.14;
+        letter-spacing: -0.04em;
+    }}
+    .bento-card:hover .bento-num {{ opacity: 0.32; }}
+    .bento-tag {{
+        padding: 0.2rem 0.6rem; background: var(--s-alpha); color: var(--s);
+        border-radius: 50px; font-size: 0.65rem; font-weight: 800;
+        text-transform: uppercase; letter-spacing: 1px; white-space: nowrap;
+    }}
+    .bento-body {{ position: relative; z-index: 1; flex: 1; }}
+    .bento-title {{
+        font-size: clamp(1.1rem,1.7vw,1.35rem) !important; font-weight: 800 !important;
+        line-height: 1.2 !important; color: var(--txt-h) !important;
+        letter-spacing: -0.02em !important; margin-bottom: 0.6rem !important;
+        position: relative; display: inline-block;
+    }}
+    .bento-title::after {{
+        content: ''; position: absolute; bottom: -2px; left: 0;
+        width: 0; height: 2px; background: linear-gradient(90deg, var(--p), var(--s));
+        border-radius: 1px; transition: width 0.4s cubic-bezier(0.4,0,0.2,1);
+    }}
+    .bento-card:hover .bento-title::after {{ width: 100%; }}
+    .bento-desc {{
+        font-size: clamp(0.875rem,1.15vw,1rem) !important;
+        line-height: 1.7 !important; opacity: 0.78 !important; margin: 0 !important;
+    }}
+    .bento-desc strong {{ color: var(--p); font-weight: 800; opacity: 1; }}
+    .bento-card-line {{
+        position: absolute; bottom: 0; left: 0; height: 3px; width: 0;
+        background: linear-gradient(90deg, var(--p), var(--s));
+        border-radius: 0 0 var(--radius) var(--radius);
+        transition: width 0.5s cubic-bezier(0.4,0,0.2,1);
+    }}
+    .bento-card:hover .bento-card-line {{ width: 100%; }}
+    .bento-grid > .bento-card:nth-child(4) .bento-num {{ color: rgba(255,255,255,0.25) !important; opacity: 1; }}
+    .bento-grid > .bento-card:nth-child(4) .bento-tag {{ background: rgba(255,255,255,0.15); color: #fff; }}
+    .bento-grid > .bento-card:nth-child(4) .bento-title {{ color: #fff !important; }}
+    .bento-grid > .bento-card:nth-child(4) .bento-title::after {{ background: rgba(255,255,255,0.5); }}
+    .bento-grid > .bento-card:nth-child(4) .bento-desc {{ color: rgba(255,255,255,0.85) !important; opacity: 1 !important; }}
+    .bento-grid > .bento-card:nth-child(4) .bento-card-line {{ background: rgba(255,255,255,0.4); }}
+"""
 
 
 # ─────────────────────────────────────────────────────────────────────────────
@@ -529,7 +601,7 @@ def generate_modern_css(
 
 /* ── CSS CUSTOM PROPERTIES ──────────────────────────────── */
 :root {{
-    /* Theme palette */
+    /* Theme palette — all colour tokens participate in the transition system */
     --p:      {t['p']};
     --s:      {t['s']};
     --bg:     {t['bg']};
@@ -538,6 +610,12 @@ def generate_modern_css(
     --radius: {t['radius']};
     --shadow: {t['shadow']};
     --border: {t['border']};
+    /* Smooth theme/dark-mode transitions applied universally */
+    --transition-theme: background-color 0.45s cubic-bezier(0.4,0,0.2,1),
+                        color            0.45s cubic-bezier(0.4,0,0.2,1),
+                        border-color     0.35s cubic-bezier(0.4,0,0.2,1),
+                        box-shadow       0.45s cubic-bezier(0.4,0,0.2,1),
+                        fill             0.3s ease;
 
     /* Contrast-safe text on theme colours (WCAG AA auto-calculated) */
     --on-p:   {safe_btn_on_primary};
@@ -592,16 +670,32 @@ html {{
 
 /* ── BASE ───────────────────────────────────────────────── */
 body {{
-    background:   var(--bg);
-    color:        var(--txt-b);
-    font-family:  var(--b-font);
-    font-size:    var(--fs-body);
-    line-height:  1.8;
+    background:     var(--bg);
+    color:          var(--txt-b);
+    font-family:    var(--b-font);
+    font-size:      var(--fs-body);
+    line-height:    1.8;
     letter-spacing: 0.01em;
-    overflow-x:   hidden;
-    width:        100%;
-    max-width:    100vw;
-    transition:   background-color 0.4s ease, color 0.4s ease;
+    overflow-x:     hidden;
+    width:          100%;
+    max-width:      100vw;
+    /* Universal smooth theme & dark-mode switching — covers bg, text, borders */
+    transition: background-color 0.45s cubic-bezier(0.4,0,0.2,1),
+                color            0.45s cubic-bezier(0.4,0,0.2,1);
+}}
+/* Apply colour transitions to all themed surfaces */
+*, section, nav, footer, header, article, aside,
+.card, .bento-card, .stats-ribbon, .pricing-wrapper,
+#cart-modal, #lead-popup, #lang-modal, details,
+input, textarea, select, button, a {{
+    transition-property: background-color, color, border-color, box-shadow, fill;
+    transition-duration: 0.4s;
+    transition-timing-function: cubic-bezier(0.4, 0, 0.2, 1);
+}}
+/* Restore fast/custom transitions for interactive elements — prevents sluggish hover */
+.btn, .card, .bento-card, .nav-link, .social-link, .reveal,
+.carousel-slide, .filter-pill, .lang-opt, .cart-close, details {{
+    transition-duration: 0.3s !important;
 }}
 iframe, model-viewer {{ max-width: 100%; display: block; }}
 img {{ display: block; max-width: 100%; }}
@@ -1301,9 +1395,13 @@ footer {{
     transition:      background 0.3s, transform 0.3s;
     text-decoration: none;
 }}
-.social-link:hover {{ background: var(--p); transform: translateY(-3px) scale(1.1); }}
-.social-icon {{ width: 20px; height: 20px; fill: rgba(255,255,255,0.7); }}
-.social-link:hover .social-icon {{ fill: var(--on-p); }}
+.social-link:hover {{ background: var(--brand, var(--p)); transform: translateY(-3px) scale(1.1); box-shadow: 0 8px 20px color-mix(in srgb, var(--brand, var(--p)) 40%, transparent); }}
+.social-icon {{ width: 20px; height: 20px; fill: rgba(255,255,255,0.75); transition: fill 0.25s; }}
+.social-link:hover .social-icon {{ fill: #ffffff; }}
+/* Brand colour per platform (set via style="--brand:#hex" on each anchor) */
+.social-link--instagram {{ background: rgba(255,255,255,0.06); }}
+.social-link--instagram:hover {{ background: linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888) !important; }}
+.social-link--instagram:hover .social-icon {{ fill: #fff; }}
 .footer-nav h4 {{
     color:          rgba(255,255,255,0.5);
     font-size:      0.75rem;
