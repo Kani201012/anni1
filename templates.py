@@ -760,7 +760,7 @@ def _gen_inventory_js(sheet_url_js: str, custom_img_js: str, wa_num_js: str, biz
     async function fetchCSV(url) {{
         var target = url;
         if (url.indexOf('docs.google.com/spreadsheets') !== -1) {{
-            // Normalise to CSV export URL — strip everything after /d/{ID}
+            // Normalise to CSV export URL using the spreadsheet ID
             var parts = target.split('/d/');
             if (parts.length >= 2) {{
                 var sheetId = parts[1].split('/')[0];
@@ -1621,7 +1621,7 @@ def gen_blog_index_html(cfg: 'SiteConfig') -> str:
     async function fetchCSV(url) {{
         var target = url;
         if (url.indexOf('docs.google.com/spreadsheets') !== -1) {{
-            // Normalise to CSV export URL — strip everything after /d/{ID}
+            // Normalise to CSV export URL using the spreadsheet ID
             var parts = target.split('/d/');
             if (parts.length >= 2) {{
                 var sheetId = parts[1].split('/')[0];
@@ -1740,7 +1740,7 @@ def gen_blog_post_html(cfg: 'SiteConfig') -> str:
     async function fetchCSV(url) {{
         var target = url;
         if (url.indexOf('docs.google.com/spreadsheets') !== -1) {{
-            // Normalise to CSV export URL — strip everything after /d/{ID}
+            // Normalise to CSV export URL using the spreadsheet ID
             var parts = target.split('/d/');
             if (parts.length >= 2) {{
                 var sheetId = parts[1].split('/')[0];
