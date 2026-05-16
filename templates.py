@@ -1492,8 +1492,11 @@ def gen_product_page_content(cfg: 'SiteConfig', is_demo: bool = False) -> str:
 def gen_blog_index_html(cfg: 'SiteConfig') -> str:
     if not cfg.show_blog:
         return ""
+    
+    # Safely dump variables to JSON to prevent quote escaping errors in JS
     sheet_js = json.dumps(cfg.blog_sheet_url)
     img1_js  = json.dumps(sanitize_url(cfg.hero_img_1))
+    
     return f"""
 <header class="blog-hero" role="banner"
     style="background-image:linear-gradient(rgba(0,0,0,0.6),rgba(0,0,0,0.6)),url({json.dumps(sanitize_url(cfg.hero_img_1))});">
@@ -1506,9 +1509,10 @@ def gen_blog_index_html(cfg: 'SiteConfig') -> str:
     <div class="container">
         <h2 id="blog-posts-heading" class="sr-only">Blog Posts</h2>
         <div id="blog-grid" class="grid-3" role="list" aria-label="Blog posts">
-            <div class="loading-skeleton"></div>
-            <div class="loading-skeleton"></div>
-            <div class="loading-skeleton"></div>
+            <!-- Loading Skeleton -->
+            <div class="loading-skeleton" style="min-height:300px; border-radius:12px;"></div>
+            <div class="loading-skeleton" style="min-height:300px; border-radius:12px;"></div>
+            <div class="loading-skeleton" style="min-height:300px; border-radius:12px;"></div>
         </div>
     </div>
 </section>
@@ -1516,47 +1520,90 @@ def gen_blog_index_html(cfg: 'SiteConfig') -> str:
 (function() {{
     'use strict';
     const SHEET = {sheet_js};
-    
+    const DEFAULT_IMG = {img1_js};
+
     async function loadBlog() {{
         const box = document.getElementById('blog-grid');
-        if (!box || !SHEET) {{ if(box) box.innerHTML = '<p style="text-align:center;padding:2rem;opacity:0.5;">Connect a Google Sheet to populate your blog.</p>'; return; }}
+        if (!box) return;
+        
+        if (!SHEET || SHEET === "") {{
+            box.innerHTML = '<p style="text-align:center; padding:3rem; opacity:0.6; font-size:1.2rem; grid-column: 1/-1;">Please connect a valid Google Sheet CSV URL in the Titan Architect to load blog posts.</p>';
+            return;
+        }}
+
         try {{
             const res = await fetch(SHEET);
+            if (!res.ok) throw new Error('HTTP Error: ' + res.status);
+            
             const txt = await res.text();
             const lines = txt.split(/\\r?\\n/).filter(l => l.trim());
-            box.innerHTML = '';
+            
+            box.innerHTML = ''; // Clear loading skeletons
+            
+            let postCount = 0;
+
+            // Start at i=1 to skip the CSV header row
             for (let i = 1; i < lines.length; i++) {{
                 const r = parseCSVLine(lines[i]);
-                if (r.length < 5 || !r[0]) continue;
-                const imgSrc = r[5] || {img1_js};
+                
+                // Ensure we have at least slug, title, and excerpt
+                if (r.length < 3 || !r[0].trim()) continue;
+                
+                postCount++;
+                
+                // Map CSV columns (safely handle missing columns)
+                const slug     = encodeURIComponent(r[0].trim());
+                const title    = r[1] ? r[1].trim() : 'Untitled Post';
+                const author   = r[2] ? r[2].trim() : 'Admin';
+                const category = r[3] ? r[3].trim() : 'General';
+                const excerpt  = r[4] ? r[4].trim() : '';
+                const imgSrc   = r[5] && r[5].trim() !== '' ? r[5].trim() : DEFAULT_IMG;
+
                 const article = document.createElement('article');
                 article.className = 'card reveal';
                 article.setAttribute('role', 'listitem');
-                article.innerHTML = [
-                    '<img src="' + imgSrc + '" style="width:100%;height:220px;object-fit:cover;" loading="lazy" alt="' + r[1] + '">',
-                    '<div class="card-body">',
-                    '  <span class="blog-category">' + (r[3] || 'General') + '</span>',
-                    '  <h3><a href="post.html?id=' + encodeURIComponent(r[0]) + '" class="blog-title-link">' + r[1] + '</a></h3>',
-                    '  <p class="card-desc">' + (r[4] || '') + '</p>',
-                    '  <a href="post.html?id=' + encodeURIComponent(r[0]) + '" class="btn btn-primary blog-read-btn" aria-label="Read: ' + r[1] + '">',
-                    '    Read Article →',
-                    '  </a>',
-                    '</div>',
-                ].join('\\n');
+                
+                article.innerHTML = `
+                    <img src="${{imgSrc}}" style="width:100%; height:220px; object-fit:cover;" loading="lazy" alt="${{title.replace(/"/g, '&quot;')}}">
+                    <div class="card-body">
+                        <span class="blog-category" style="display:inline-block; background:var(--p); color:#fff; padding:4px 12px; border-radius:50px; font-size:0.75rem; font-weight:bold; text-transform:uppercase; margin-bottom:15px; width:fit-content;">
+                            ${{category}}
+                        </span>
+                        <h3 style="font-size:1.4rem; line-height:1.3; margin-bottom:10px;">
+                            <a href="post.html?id=${{slug}}" class="blog-title-link" style="color:var(--txt-h); text-decoration:none;">${{title}}</a>
+                        </h3>
+                        <p class="card-desc" style="opacity:0.8; font-size:0.95rem; line-height:1.6; margin-bottom:20px; flex-grow:1;">${{excerpt}}</p>
+                        <a href="post.html?id=${{slug}}" class="btn btn-primary blog-read-btn" style="width:100%; text-align:center;">Read Article &rarr;</a>
+                    </div>
+                `;
                 box.appendChild(article);
             }}
+
+            if (postCount === 0) {{
+                box.innerHTML = '<p style="text-align:center; padding:3rem; grid-column: 1/-1;">Your blog sheet is empty. Add some posts!</p>';
+            }}
+
+            // Re-trigger scroll animations for new elements
+            if (window.IntersectionObserver) {{
+                const obs = new IntersectionObserver((entries) => {{
+                    entries.forEach(e => {{ if(e.isIntersecting) {{ e.target.classList.add('active'); obs.unobserve(e.target); }} }});
+                }}, {{ threshold: 0.1 }});
+                box.querySelectorAll('.reveal:not(.active)').forEach(el => obs.observe(el));
+            }}
+
         }} catch(err) {{
-            console.error('[Titan] Blog index error:', err);
-            if (box) box.innerHTML = '<p class="error-msg">Failed to load posts. Check your Google Sheet link.</p>';
+            console.error('[Titan Engine] Blog Fetch Error:', err);
+            if (box) box.innerHTML = `<p class="error-msg" style="color:red; text-align:center; grid-column: 1/-1; padding:2rem;">Failed to load posts. Check your Google Sheet sharing settings (Must be "Published to Web" as CSV).</p>`;
         }}
     }}
-    
+
+    // Ensure parseCSVLine exists before running
     function waitForRuntime(cb, n) {{
         if (typeof parseCSVLine === 'function') {{ cb(); return; }}
-        if ((n || 0) > 40) return;
+        if ((n || 0) > 40) return; // give up after ~3 seconds
         setTimeout(function() {{ waitForRuntime(cb, (n || 0) + 1); }}, 80);
     }}
-    
+
     document.addEventListener('DOMContentLoaded', function() {{ waitForRuntime(loadBlog); }});
 }})();
 </script>"""
