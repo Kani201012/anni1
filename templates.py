@@ -1629,37 +1629,7 @@ def gen_blog_post_html(cfg: 'SiteConfig') -> str:
             container.innerHTML = '<div class="container"><p class="error-msg">Failed to load article.</p></div>';
         }}
     }}
-    async function fetchCSV(url) {{
-        // Rule: if URL already has output=csv or export?format=csv — use as-is
-        var target = url;
-        if (url.indexOf('docs.google.com/spreadsheets') !== -1 &&
-            url.indexOf('output=csv') === -1 &&
-            url.indexOf('export?format=csv') === -1) {{
-            var stripped = url;
-            var markers = ['/edit', '/view', '/htmlview', '/pub?'];
-            for (var m = 0; m < markers.length; m++) {{
-                var mi = stripped.indexOf(markers[m]);
-                if (mi !== -1) {{ stripped = stripped.substring(0, mi); break; }}
-            }}
-            if (stripped.charAt(stripped.length-1) === '/') {{ stripped = stripped.slice(0,-1); }} target = stripped + '/export?format=csv';
-        }}
-        try {{
-            var r1 = await fetch(target, {{ cache: 'no-store' }});
-            if (r1.ok) {{ var t1 = await r1.text(); if (t1.trim().length > 0) return t1; }}
-        }} catch(e1) {{}}
-        try {{
-            var proxy1 = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(target);
-            var r2 = await fetch(proxy1, {{ cache: 'no-store' }});
-            if (r2.ok) {{ var t2 = await r2.text(); if (t2.trim().length > 0) return t2; }}
-        }} catch(e2) {{}}
-        try {{
-            var proxy2 = 'https://corsproxy.io/?' + encodeURIComponent(target);
-            var r3 = await fetch(proxy2, {{ cache: 'no-store' }});
-            if (r3.ok) {{ var t3 = await r3.text(); if (t3.trim().length > 0) return t3; }}
-        }} catch(e3) {{}}
-        throw new Error('[Titan] All fetch strategies failed for: ' + target);
-    }}
-    function waitForRuntime(cb, n) {{
+        function waitForRuntime(cb, n) {{
         if (typeof parseCSVLine === 'function') {{ cb(); return; }}
         if ((n || 0) > 40) return;
         setTimeout(function() {{ waitForRuntime(cb, (n || 0) + 1); }}, 80);
