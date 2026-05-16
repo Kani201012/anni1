@@ -758,27 +758,43 @@ def _gen_inventory_js(sheet_url_js: str, custom_img_js: str, wa_num_js: str, biz
 
     // CORS proxy chain — try direct, then allorigins.win fallback
     async function fetchCSV(url) {{
+        // --- URL NORMALISATION ---
+        // Rule 1: already a valid CSV export URL → use as-is (DO NOT rewrite)
         var target = url;
-        if (url.indexOf('docs.google.com/spreadsheets') !== -1) {{
-            // Normalise to CSV export URL using the spreadsheet ID
-            var parts = target.split('/d/');
-            if (parts.length >= 2) {{
-                var sheetId = parts[1].split('/')[0];
-                target = 'https://docs.google.com/spreadsheets/d/' + sheetId + '/export?format=csv';
+        if (url.indexOf('docs.google.com/spreadsheets') !== -1 &&
+            url.indexOf('output=csv') === -1 &&
+            url.indexOf('export?format=csv') === -1) {{
+            // Only rewrite editor/viewer URLs, never published CSV URLs
+            var stripped = url;
+            var markers = ['/edit', '/view', '/htmlview', '/pub?'];
+            for (var m = 0; m < markers.length; m++) {{
+                var mi = stripped.indexOf(markers[m]);
+                if (mi !== -1) {{ stripped = stripped.substring(0, mi); break; }}
             }}
-            if (target.indexOf('export?format=csv') === -1) {{
-                if (target.charAt(target.length - 1) === '/') {{ target = target.slice(0, -1); }} target = target + '/export?format=csv';
-            }}
+            if (stripped.charAt(stripped.length-1) === '/') {{ stripped = stripped.slice(0,-1); }} target = stripped + '/export?format=csv';
         }}
+
+        // --- FETCH STRATEGY 1: direct (works when sheet is public + CORS allowed) ---
         try {{
-            var r = await fetch(target, {{ cache: 'no-store' }});
-            if (r.ok) return r.text();
-        }} catch(e) {{}}
-        // Proxy fallback for CORS-restricted environments
-        var proxy = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(target);
-        var r2 = await fetch(proxy, {{ cache: 'no-store' }});
-        if (r2.ok) return r2.text();
-        throw new Error('Cannot fetch: ' + target);
+            var r1 = await fetch(target, {{ cache: 'no-store' }});
+            if (r1.ok) {{ var t1 = await r1.text(); if (t1.trim().length > 0) return t1; }}
+        }} catch(e1) {{}}
+
+        // --- FETCH STRATEGY 2: allorigins.win CORS proxy ---
+        try {{
+            var proxy1 = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(target);
+            var r2 = await fetch(proxy1, {{ cache: 'no-store' }});
+            if (r2.ok) {{ var t2 = await r2.text(); if (t2.trim().length > 0) return t2; }}
+        }} catch(e2) {{}}
+
+        // --- FETCH STRATEGY 3: corsproxy.io fallback ---
+        try {{
+            var proxy2 = 'https://corsproxy.io/?' + encodeURIComponent(target);
+            var r3 = await fetch(proxy2, {{ cache: 'no-store' }});
+            if (r3.ok) {{ var t3 = await r3.text(); if (t3.trim().length > 0) return t3; }}
+        }} catch(e3) {{}}
+
+        throw new Error('[Titan] All fetch strategies failed for: ' + target);
     }}
 
     async function loadInventoryWithProxy() {{
@@ -1619,26 +1635,34 @@ def gen_blog_index_html(cfg: 'SiteConfig') -> str:
     }}
     // Robust CSV fetch with CORS proxy fallback
     async function fetchCSV(url) {{
+        // Rule: if URL already has output=csv or export?format=csv — use as-is
         var target = url;
-        if (url.indexOf('docs.google.com/spreadsheets') !== -1) {{
-            // Normalise to CSV export URL using the spreadsheet ID
-            var parts = target.split('/d/');
-            if (parts.length >= 2) {{
-                var sheetId = parts[1].split('/')[0];
-                target = 'https://docs.google.com/spreadsheets/d/' + sheetId + '/export?format=csv';
+        if (url.indexOf('docs.google.com/spreadsheets') !== -1 &&
+            url.indexOf('output=csv') === -1 &&
+            url.indexOf('export?format=csv') === -1) {{
+            var stripped = url;
+            var markers = ['/edit', '/view', '/htmlview', '/pub?'];
+            for (var m = 0; m < markers.length; m++) {{
+                var mi = stripped.indexOf(markers[m]);
+                if (mi !== -1) {{ stripped = stripped.substring(0, mi); break; }}
             }}
-            if (target.indexOf('export?format=csv') === -1) {{
-                if (target.charAt(target.length - 1) === '/') {{ target = target.slice(0, -1); }} target = target + '/export?format=csv';
-            }}
+            if (stripped.charAt(stripped.length-1) === '/') {{ stripped = stripped.slice(0,-1); }} target = stripped + '/export?format=csv';
         }}
         try {{
-            var r = await fetch(target, {{ cache: 'no-store' }});
-            if (r.ok) return r.text();
-        }} catch(e) {{}}
-        var proxy = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(target);
-        var r2 = await fetch(proxy, {{ cache: 'no-store' }});
-        if (r2.ok) return r2.text();
-        throw new Error('Cannot fetch: ' + target);
+            var r1 = await fetch(target, {{ cache: 'no-store' }});
+            if (r1.ok) {{ var t1 = await r1.text(); if (t1.trim().length > 0) return t1; }}
+        }} catch(e1) {{}}
+        try {{
+            var proxy1 = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(target);
+            var r2 = await fetch(proxy1, {{ cache: 'no-store' }});
+            if (r2.ok) {{ var t2 = await r2.text(); if (t2.trim().length > 0) return t2; }}
+        }} catch(e2) {{}}
+        try {{
+            var proxy2 = 'https://corsproxy.io/?' + encodeURIComponent(target);
+            var r3 = await fetch(proxy2, {{ cache: 'no-store' }});
+            if (r3.ok) {{ var t3 = await r3.text(); if (t3.trim().length > 0) return t3; }}
+        }} catch(e3) {{}}
+        throw new Error('[Titan] All fetch strategies failed for: ' + target);
     }}
     function waitForRuntime(cb, n) {{
         if (typeof parseCSVLine === 'function') {{ cb(); return; }}
@@ -1738,26 +1762,34 @@ def gen_blog_post_html(cfg: 'SiteConfig') -> str:
         }}
     }}
     async function fetchCSV(url) {{
+        // Rule: if URL already has output=csv or export?format=csv — use as-is
         var target = url;
-        if (url.indexOf('docs.google.com/spreadsheets') !== -1) {{
-            // Normalise to CSV export URL using the spreadsheet ID
-            var parts = target.split('/d/');
-            if (parts.length >= 2) {{
-                var sheetId = parts[1].split('/')[0];
-                target = 'https://docs.google.com/spreadsheets/d/' + sheetId + '/export?format=csv';
+        if (url.indexOf('docs.google.com/spreadsheets') !== -1 &&
+            url.indexOf('output=csv') === -1 &&
+            url.indexOf('export?format=csv') === -1) {{
+            var stripped = url;
+            var markers = ['/edit', '/view', '/htmlview', '/pub?'];
+            for (var m = 0; m < markers.length; m++) {{
+                var mi = stripped.indexOf(markers[m]);
+                if (mi !== -1) {{ stripped = stripped.substring(0, mi); break; }}
             }}
-            if (target.indexOf('export?format=csv') === -1) {{
-                if (target.charAt(target.length - 1) === '/') {{ target = target.slice(0, -1); }} target = target + '/export?format=csv';
-            }}
+            if (stripped.charAt(stripped.length-1) === '/') {{ stripped = stripped.slice(0,-1); }} target = stripped + '/export?format=csv';
         }}
         try {{
-            var r = await fetch(target, {{ cache: 'no-store' }});
-            if (r.ok) return r.text();
-        }} catch(e) {{}}
-        var proxy = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(target);
-        var r2 = await fetch(proxy, {{ cache: 'no-store' }});
-        if (r2.ok) return r2.text();
-        throw new Error('Cannot fetch: ' + target);
+            var r1 = await fetch(target, {{ cache: 'no-store' }});
+            if (r1.ok) {{ var t1 = await r1.text(); if (t1.trim().length > 0) return t1; }}
+        }} catch(e1) {{}}
+        try {{
+            var proxy1 = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(target);
+            var r2 = await fetch(proxy1, {{ cache: 'no-store' }});
+            if (r2.ok) {{ var t2 = await r2.text(); if (t2.trim().length > 0) return t2; }}
+        }} catch(e2) {{}}
+        try {{
+            var proxy2 = 'https://corsproxy.io/?' + encodeURIComponent(target);
+            var r3 = await fetch(proxy2, {{ cache: 'no-store' }});
+            if (r3.ok) {{ var t3 = await r3.text(); if (t3.trim().length > 0) return t3; }}
+        }} catch(e3) {{}}
+        throw new Error('[Titan] All fetch strategies failed for: ' + target);
     }}
     function waitForRuntime(cb, n) {{
         if (typeof parseCSVLine === 'function') {{ cb(); return; }}
