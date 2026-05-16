@@ -354,7 +354,6 @@ def gen_nav(cfg: 'SiteConfig') -> str:
     const nav = document.getElementById('main-navbar');
     if (topBar && nav) {{
         nav.style.top = topBar.offsetHeight + 'px';
-    }}
 }})();
 </script>"""
 
