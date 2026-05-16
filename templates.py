@@ -1566,63 +1566,66 @@ def gen_blog_index_html(cfg: 'SiteConfig') -> str:
 # SECTION 21 — BLOG POST
 # ═══════════════════════════════════════════════════════════════════════════════
 
-def gen_blog_post_html():
-    if not show_blog: return ""
+def gen_blog_post_html(cfg: 'SiteConfig') -> str:
+    if not cfg.show_blog:
+        return ""
+    sheet_js   = json.dumps(cfg.blog_sheet_url)
+    biz_js     = json.dumps(cfg.biz_name)
     return f"""
-    <article id="post-container" style="padding-top:0px;">Loading Content...</article>
-    {gen_csv_parser()}
-    <script defer>
+<article id="post-container" class="blog-post-container" aria-live="polite">
+    <div class="loading-skeleton post-skeleton"></div>
+</article>
+<script>
+(function() {{
+    'use strict';
+    const SHEET = {sheet_js};
+    const BIZ   = {biz_js};
+    
     async function loadPost() {{
-        if (!'{blog_sheet_url}') return; // LIGHTHOUSE FIX: Abort if no CSV provided
-        const params = new URLSearchParams(window.location.search); const slug = params.get('id');
+        const container = document.getElementById('post-container');
+        if (!container || !SHEET) return;
+        const slug = new URLSearchParams(window.location.search).get('id');
         try {{
-            const res = await fetch('{blog_sheet_url}'); const txt = await res.text(); const lines = txt.split(/\\r\\n|\\n/);
-            const container = document.getElementById('post-container');
-            for(let i=1; i<lines.length; i++) {{
+            const res = await fetch(SHEET);
+            const txt = await res.text();
+            const lines = txt.split(/\\r?\\n/).filter(l => l.trim());
+            for (let i = 1; i < lines.length; i++) {{
                 const r = parseCSVLine(lines[i]);
-                if(r[0] === slug) {{
-                    const contentHtml = parseMarkdown(r[6]); const u = encodeURIComponent(window.location.href); const t = encodeURIComponent(r[1]);
-                    document.title = r[1] + " | {biz_name}";
-                    
-                    container.innerHTML = `
-                        <header style="background:var(--p); padding: 120px 1rem 4rem 1rem; color:var(--btn-txt); text-align:center;">
-                            <div class="container"><span class="blog-badge">${{r[3]}}</span><h1 style="font-size:clamp(1.8rem, 5vw, 3.5rem); margin-top:1rem; color:var(--btn-txt) !important;">${{r[1]}}</h1></div>
-                        </header>
-                        <div class="container" style="max-width:800px; padding: clamp(1.5rem, 5vw, 3rem) 1rem;">
-                            <img src="${{r[5]}}" style="width:100%; border-radius:12px; margin-bottom:2rem;" alt="${{r[1]}}">
-                            <div style="line-height:1.8;">${{contentHtml}}</div>
-                            
-                            <div style="margin-top:4rem; border-top:1px solid rgba(128,128,128,0.2); padding-top:2rem;">
-                                <p style="font-weight:bold; font-size:1.1rem; margin-bottom:0.5rem;">Share this article:</p>
-                                <div class="share-row">
-                                    <a href="https://wa.me/?text=${{t}}%20${{u}}" target="_blank" rel="noopener noreferrer" class="share-btn bg-wa" title="Share on WhatsApp"><svg viewBox="0 0 24 24"><path d="M12.04 2c-5.46 0-9.91 4.45-9.91 9.91c0 1.75.46 3.45 1.32 4.95L2.05 22l5.25-1.38c1.45.79 3.08 1.21 4.74 1.21c5.46 0 9.91-4.45 9.91-9.91c0-2.65-1.03-5.14-2.9-7.01A9.816 9.816 0 0 0 12.04 2m.01 1.67c2.2 0 4.26.86 5.82 2.42a8.225 8.225 0 0 1 2.41 5.83c0 4.54-3.7 8.23-8.24 8.23c-1.48 0-2.93-.39-4.19-1.15l-.3-.17l-3.12.82l.83-3.04l-.2-.32a8.188 8.188 0 0 1-1.26-4.38c.01-4.54 3.7-8.24 8.25-8.24m-3.53 3.16c-.13 0-.35.05-.54.26c-.19.2-.72.7-.72 1.72s.73 2.01.83 2.14c.1.13 1.44 2.19 3.48 3.07c.49.21.87.33 1.16.43c.49.16.94.13 1.29.08c.4-.06 1.21-.5 1.38-.98c.17-.48.17-.89.12-.98c-.05-.09-.18-.13-.37-.23c-.19-.1-.1.13-.1.13s-1.13-.56-1.32-.66c-.19-.1-.32-.15-.45.05c-.13.2-.51.65-.62.78c-.11.13-.23.15-.42.05c-.19-.1-.8-.3-1.53-.94c-.57-.5-1.02-1.12-1.21-1.45c-.11-.19-.01-.29.09-.38c.09-.08.19-.23.29-.34c.1-.11.13-.19.19-.32c.06-.13.03-.24-.01-.34c-.05-.1-.45-1.08-.62-1.48c-.16-.4-.36-.34-.51-.35c-.11-.01-.25-.01-.4-.01Z"/></path></svg></a>
-                                    <a href="https://www.facebook.com/sharer/sharer.php?u=${{u}}" target="_blank" rel="noopener noreferrer" class="share-btn bg-fb" title="Share on Facebook"><svg viewBox="0 0 24 24"><path d="M18 2h-3a5 5 0 0 0-5 5v3H7v4h3v8h4v-8h3l1-4h-4V7a1 1 0 0 1 1-1h3z"></path></svg></a>
-                                    <a href="https://twitter.com/intent/tweet?url=${{u}}&text=${{t}}" target="_blank" rel="noopener noreferrer" class="share-btn bg-x" title="Share on X"><svg viewBox="0 0 24 24"><path d="M18.901 1.153h3.68l-8.04 9.19L24 22.846h-7.406l-5.8-7.584l-6.638 7.584H.474l8.6-9.83L0 1.154h7.594l5.243 6.932ZM17.61 20.644h2.039L6.486 3.24H4.298Z"></path></svg></a>
-                                    <a href="https://www.linkedin.com/shareArticle?mini=true&url=${{u}}&title=${{t}}" target="_blank" rel="noopener noreferrer" class="share-btn bg-li" title="Share on LinkedIn"><svg viewBox="0 0 24 24"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2a2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6zM2 9h4v12H2zM4 2a2 2 0 1 1-2 2a2 2 0 0 1 2-2z"></path></svg></a>
-                                    <button onclick="navigator.clipboard.writeText(window.location.href); alert('Link Copied to Clipboard!');" class="share-btn bg-link" title="Copy Link" style="border:none; cursor:pointer;"><svg viewBox="0 0 24 24" fill="white"><path d="M3.9 12c0-1.71 1.39-3.1 3.1-3.1h4V7H7c-2.76 0-5 2.24-5 5s2.24 5 5 5h4v-1.9H7c-1.71 0-3.1-1.39-3.1-3.1zM8 13h8v-2H8v2zm9-6h-4v1.9h4c1.71 0 3.1 1.39 3.1 3.1s-1.39 3.1-3.1 3.1h-4V17h4c2.76 0 5-2.24 5-5s-2.24-5-5-5z"/></svg></button>
-                                </div>
-                            </div>
-                            <hr style="margin:2rem 0; border:0; border-top:1px solid rgba(128,128,128,0.2);">
-                            <a href="blog.html" class="btn btn-primary" style="display:inline-block; margin-top:1rem;">&larr; Back to Blog</a>
-                        </div>`;
-                    break;
-                }}
+                if (!r[0] || r[0] !== decodeURIComponent(slug)) continue;
+                document.title = r[1] + ' | ' + BIZ;
+                const contentHtml = parseMarkdown(r[6] || r[4] || '');
+                container.innerHTML = [
+                    '<header class="post-header">',
+                    '  <div class="container">',
+                    '    <span class="blog-category">' + (r[3] || '') + '</span>',
+                    '    <h1>' + r[1] + '</h1>',
+                    '    <p class="post-meta">' + (r[2] || '') + '</p>',
+                    '  </div>',
+                    '</header>',
+                    '<div class="container post-body">',
+                    '  <img src="' + (r[5] || '') + '" class="post-hero-img" loading="lazy" alt="' + r[1] + '">',
+                    '  <div class="post-content">' + contentHtml + '</div>',
+                    '  <a href="blog.html" class="btn btn-primary post-back-btn">← Back to Blog</a>',
+                    '</div>',
+                ].join('\\n');
+                return;
             }}
-        }} catch(e) {{}}
+            container.innerHTML = '<div class="container"><p class="error-msg">Post not found.</p></div>';
+        }} catch(err) {{
+            console.error('[Titan] Post load error:', err);
+            container.innerHTML = '<div class="container"><p class="error-msg">Failed to load article. Check your Google Sheet link.</p></div>';
+        }}
     }}
-    window.addEventListener('load', loadPost);
-    </script>
-    """
-
-def gen_inner_header(title):
-    # Added padding-top: 150px to ensure it clears the fixed navbar and top promo bar
-    return f"""
-    <div style="min-height: 40vh; background:var(--p); display:flex; align-items:center; justify-content:center; text-align:center; padding-top: 150px; padding-bottom: 50px;">
-        <div class="container">
-            <h1 style="color:#ffffff !important; margin:0; text-shadow: 0 4px 15px rgba(0,0,0,0.3); font-size: clamp(3rem, 6vw, 4.5rem);">{title}</h1>
-        </div>
-    </div>
-    """
+    
+    function waitForRuntime(cb, n) {{
+        if (typeof parseCSVLine === 'function') {{ cb(); return; }}
+        if ((n || 0) > 40) return;
+        setTimeout(function() {{ waitForRuntime(cb, (n || 0) + 1); }}, 80);
+    }}
+    
+    document.addEventListener('DOMContentLoaded', function() {{ waitForRuntime(loadPost); }});
+}})();
+</script>"""
 
 
 # ═══════════════════════════════════════════════════════════════════════════════
