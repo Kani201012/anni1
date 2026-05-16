@@ -713,12 +713,8 @@ def _render_deploy(cfg: SiteConfig) -> None:
     st.success("✅ v56 Flawless Architecture compiled.")
 
     # Build ZIP (cached in session to avoid re-building on every widget interaction)
-    @st.cache_data(show_spinner=False)
-    def _cached_zip(_cfg_hash: str) -> bytes:
-        return build_zip(cfg).getvalue()
-
-    cfg_hash = str(hash(str(cfg.__dict__)))
-    zip_bytes = _cached_zip(cfg_hash)
+    # Direct ZIP Build - Forces fresh data every time
+ zip_bytes = build_zip(cfg).getvalue()
 
     filename = f"{cfg.biz_name.lower().replace(' ', '_')}_titan_v56.zip"
 
