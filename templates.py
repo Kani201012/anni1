@@ -749,90 +749,14 @@ def _gen_inventory_js(sheet_url_js: str, custom_img_js: str, wa_num_js: str, biz
         }}
     }}
 
-    // Robust load: wait for runtime (parseCSVLine) then fetch with CORS proxy fallback
+    // Robust load: wait for runtime (parseCSVLine) then fetch directly
     function waitForRuntime(cb, n) {{
         if (typeof parseCSVLine === 'function') {{ cb(); return; }}
         if ((n || 0) > 40) {{ return; }}
         setTimeout(function() {{ waitForRuntime(cb, (n || 0) + 1); }}, 80);
     }}
 
-    // CORS proxy chain — try direct, then allorigins.win fallback
-    async function fetchCSV(url) {{
-        // --- URL NORMALISATION ---
-        // Rule 1: already a valid CSV export URL → use as-is (DO NOT rewrite)
-        var target = url;
-        if (url.indexOf('docs.google.com/spreadsheets') !== -1 &&
-            url.indexOf('output=csv') === -1 &&
-            url.indexOf('export?format=csv') === -1) {{
-            // Only rewrite editor/viewer URLs, never published CSV URLs
-            var stripped = url;
-            var markers = ['/edit', '/view', '/htmlview', '/pub?'];
-            for (var m = 0; m < markers.length; m++) {{
-                var mi = stripped.indexOf(markers[m]);
-                if (mi !== -1) {{ stripped = stripped.substring(0, mi); break; }}
-            }}
-            if (stripped.charAt(stripped.length-1) === '/') {{ stripped = stripped.slice(0,-1); }} target = stripped + '/export?format=csv';
-        }}
-
-        // --- FETCH STRATEGY 1: direct (works when sheet is public + CORS allowed) ---
-        try {{
-            var r1 = await fetch(target, {{ cache: 'no-store' }});
-            if (r1.ok) {{ var t1 = await r1.text(); if (t1.trim().length > 0) return t1; }}
-        }} catch(e1) {{}}
-
-        // --- FETCH STRATEGY 2: allorigins.win CORS proxy ---
-        try {{
-            var proxy1 = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(target);
-            var r2 = await fetch(proxy1, {{ cache: 'no-store' }});
-            if (r2.ok) {{ var t2 = await r2.text(); if (t2.trim().length > 0) return t2; }}
-        }} catch(e2) {{}}
-
-        // --- FETCH STRATEGY 3: corsproxy.io fallback ---
-        try {{
-            var proxy2 = 'https://corsproxy.io/?' + encodeURIComponent(target);
-            var r3 = await fetch(proxy2, {{ cache: 'no-store' }});
-            if (r3.ok) {{ var t3 = await r3.text(); if (t3.trim().length > 0) return t3; }}
-        }} catch(e3) {{}}
-
-        throw new Error('[Titan] All fetch strategies failed for: ' + target);
-    }}
-
-    async function loadInventoryWithProxy() {{
-        var grid = document.getElementById('inv-grid');
-        if (!grid) return;
-        if (!SHEET_URL) {{
-            grid.innerHTML = '<div style="text-align:center;padding:3rem;opacity:0.5;"><p>Connect a Google Sheet to populate your store.</p></div>';
-            return;
-        }}
-        try {{
-            var txt = await fetchCSV(SHEET_URL);
-            var lines = txt.split(/\r?\n/).filter(function(l) {{ return l.trim(); }});
-            allProducts = [];
-            for (var i = 1; i < lines.length; i++) {{
-                var c = parseCSVLine(lines[i]);
-                if (c.length < 2 || !c[0]) continue;
-                var imgList = c[3] ? c[3].split('|').map(function(s) {{ return s.trim(); }}).filter(Boolean) : [];
-                var category = (c[6] || 'General').trim();
-                categories.add(category);
-                allProducts.push({{
-                    name:     c[0] || '',
-                    price:    c[1] || '',
-                    desc:     c[2] || '',
-                    imgs:     imgList.length ? imgList : [DEFAULT_IMG],
-                    payment:  c[4] || '',
-                    model:    c[5] || '',
-                    category: category,
-                }});
-            }}
-            buildFilters();
-            renderProducts(allProducts);
-        }} catch(err) {{
-            console.error('[Titan] Store load error:', err);
-            grid.innerHTML = '<p style="text-align:center;padding:2rem;color:#ef4444;">Could not load store data. Ensure your Google Sheet is published: File > Share > Publish to web > CSV format.</p>';
-        }}
-    }}
-
-    document.addEventListener('DOMContentLoaded', function() {{ waitForRuntime(loadInventoryWithProxy); }});
+    document.addEventListener('DOMContentLoaded', function() {{ waitForRuntime(loadInventory); }});
 }})();
 </script>"""
 
@@ -1633,71 +1557,15 @@ def gen_blog_index_html(cfg: 'SiteConfig') -> str:
             if (box) box.innerHTML = '<p class="error-msg">Failed to load posts.</p>';
         }}
     }}
-    // Robust CSV fetch with CORS proxy fallback
-    async function fetchCSV(url) {{
-        // Rule: if URL already has output=csv or export?format=csv — use as-is
-        var target = url;
-        if (url.indexOf('docs.google.com/spreadsheets') !== -1 &&
-            url.indexOf('output=csv') === -1 &&
-            url.indexOf('export?format=csv') === -1) {{
-            var stripped = url;
-            var markers = ['/edit', '/view', '/htmlview', '/pub?'];
-            for (var m = 0; m < markers.length; m++) {{
-                var mi = stripped.indexOf(markers[m]);
-                if (mi !== -1) {{ stripped = stripped.substring(0, mi); break; }}
-            }}
-            if (stripped.charAt(stripped.length-1) === '/') {{ stripped = stripped.slice(0,-1); }} target = stripped + '/export?format=csv';
-        }}
-        try {{
-            var r1 = await fetch(target, {{ cache: 'no-store' }});
-            if (r1.ok) {{ var t1 = await r1.text(); if (t1.trim().length > 0) return t1; }}
-        }} catch(e1) {{}}
-        try {{
-            var proxy1 = 'https://api.allorigins.win/raw?url=' + encodeURIComponent(target);
-            var r2 = await fetch(proxy1, {{ cache: 'no-store' }});
-            if (r2.ok) {{ var t2 = await r2.text(); if (t2.trim().length > 0) return t2; }}
-        }} catch(e2) {{}}
-        try {{
-            var proxy2 = 'https://corsproxy.io/?' + encodeURIComponent(target);
-            var r3 = await fetch(proxy2, {{ cache: 'no-store' }});
-            if (r3.ok) {{ var t3 = await r3.text(); if (t3.trim().length > 0) return t3; }}
-        }} catch(e3) {{}}
-        throw new Error('[Titan] All fetch strategies failed for: ' + target);
-    }}
     function waitForRuntime(cb, n) {{
         if (typeof parseCSVLine === 'function') {{ cb(); return; }}
         if ((n || 0) > 40) return;
         setTimeout(function() {{ waitForRuntime(cb, (n || 0) + 1); }}, 80);
     }}
-    document.addEventListener('DOMContentLoaded', function() {{
-        waitForRuntime(async function() {{
-            var box = document.getElementById('blog-grid');
-            if (!box || !SHEET) {{
-                if (box) box.innerHTML = '<p style="text-align:center;padding:2rem;opacity:0.5;">Connect a Google Sheet to populate your blog.</p>';
-                return;
-            }}
-            try {{
-                var txt = await fetchCSV(SHEET);
-                var lines = txt.split(/\r?\n/).filter(function(l) {{ return l.trim(); }});
-                box.innerHTML = '';
-                for (var i = 1; i < lines.length; i++) {{
-                    var r = parseCSVLine(lines[i]);
-                    if (r.length < 5 || !r[0]) continue;
-                    var imgSrc = r[5] || DEFAULT_IMG_BLOG;
-                    var article = document.createElement('article');
-                    article.className = 'card reveal';
-                    article.setAttribute('role', 'listitem');
-                    article.innerHTML = [
-                        '<img src="' + imgSrc + '" style="width:100%;height:220px;object-fit:cover;" loading="lazy" alt="' + r[1] + '">',
-                        '<div class="card-body">',
-                        '  <span class="blog-category">' + (r[3] || 'General') + '</span>',
-                        '  <h3><a href="post.html?id=' + encodeURIComponent(r[0]) + '" class="blog-title-link">' + r[1] + '</a></h3>',
-                        '  <p class="card-desc">' + (r[4] || '') + '</p>',
-                        '  <a href="post.html?id=' + encodeURIComponent(r[0]) + '" class="btn btn-primary blog-read-btn">Read Article &#8594;</a>',
-                        '</div>',
-                    ].join('\n');
-                    box.appendChild(article);
-                }}
+    
+    document.addEventListener('DOMContentLoaded', function() {{ waitForRuntime(loadBlog); }});
+}})();
+</script>"""   }}
             }} catch(err) {{
                 console.error('[Titan] Blog load error:', err);
                 if (box) box.innerHTML = '<p style="text-align:center;padding:2rem;color:#ef4444;">Could not load blog posts. Publish your Google Sheet: File > Share > Publish to web > CSV format.</p>';
