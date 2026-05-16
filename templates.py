@@ -620,11 +620,6 @@ def gen_inventory(cfg: 'SiteConfig') -> str:
 
 
 def _gen_inventory_js(sheet_url_js: str, custom_img_js: str, wa_num_js: str, biz_name_js: str) -> str:
-    """
-    v56 CHANGE: All user-data values are passed as JSON-stringified variables,
-    never interpolated directly into template literals. This eliminates the
-    entire class of quote-injection bugs present in v55.
-    """
     return f"""
 <script>
 (function() {{
@@ -648,7 +643,6 @@ def _gen_inventory_js(sheet_url_js: str, custom_img_js: str, wa_num_js: str, biz
             if (!res.ok) throw new Error('HTTP ' + res.status);
             const txt = await res.text();
             const lines = txt.split(/\\r?\\n/).filter(l => l.trim());
-            // Skip header row (index 0)
             allProducts = [];
             for (let i = 1; i < lines.length; i++) {{
                 const c = parseCSVLine(lines[i]);
@@ -670,7 +664,7 @@ def _gen_inventory_js(sheet_url_js: str, custom_img_js: str, wa_num_js: str, biz
             renderProducts(allProducts);
         }} catch(err) {{
             console.error('[Titan] Store load error:', err);
-            grid.innerHTML = '<p class="error-msg">Store temporarily unavailable. Please refresh.</p>';
+            grid.innerHTML = '<p class="error-msg">Store temporarily unavailable. Please check Google Sheet link.</p>';
         }}
     }}
 
@@ -719,7 +713,7 @@ def _gen_inventory_js(sheet_url_js: str, custom_img_js: str, wa_num_js: str, biz
                 '  class="prod-img" width="300" height="250"',
                 '  loading="lazy" decoding="async"',
                 '  alt="' + nameSafe + '"',
-                '  onerror="this.src=\'' + DEFAULT_IMG + '\'"',
+                '  onerror="this.src=\\'' + DEFAULT_IMG + '\\'"',
                 '>',
                 '<div class="card-body">',
                 '  <h3>' + nameSafe + '</h3>',
@@ -740,7 +734,6 @@ def _gen_inventory_js(sheet_url_js: str, custom_img_js: str, wa_num_js: str, biz
             ].join('\\n');
             grid.appendChild(card);
         }});
-        // Re-observe new cards for reveal animation
         if (window.IntersectionObserver) {{
             const obs = new IntersectionObserver((entries) => {{
                 entries.forEach(e => {{ if(e.isIntersecting) {{ e.target.classList.add('active'); obs.unobserve(e.target); }} }});
@@ -749,7 +742,6 @@ def _gen_inventory_js(sheet_url_js: str, custom_img_js: str, wa_num_js: str, biz
         }}
     }}
 
-    // Robust load: wait for runtime (parseCSVLine) then fetch directly
     function waitForRuntime(cb, n) {{
         if (typeof parseCSVLine === 'function') {{ cb(); return; }}
         if ((n || 0) > 40) {{ return; }}
@@ -1524,9 +1516,10 @@ def gen_blog_index_html(cfg: 'SiteConfig') -> str:
 (function() {{
     'use strict';
     const SHEET = {sheet_js};
+    
     async function loadBlog() {{
         const box = document.getElementById('blog-grid');
-        if (!box || !SHEET) {{ if(box) box.innerHTML = '<p>No blog sheet connected.</p>'; return; }}
+        if (!box || !SHEET) {{ if(box) box.innerHTML = '<p style="text-align:center;padding:2rem;opacity:0.5;">Connect a Google Sheet to populate your blog.</p>'; return; }}
         try {{
             const res = await fetch(SHEET);
             const txt = await res.text();
@@ -1554,9 +1547,10 @@ def gen_blog_index_html(cfg: 'SiteConfig') -> str:
             }}
         }} catch(err) {{
             console.error('[Titan] Blog index error:', err);
-            if (box) box.innerHTML = '<p class="error-msg">Failed to load posts.</p>';
+            if (box) box.innerHTML = '<p class="error-msg">Failed to load posts. Check your Google Sheet link.</p>';
         }}
     }}
+    
     function waitForRuntime(cb, n) {{
         if (typeof parseCSVLine === 'function') {{ cb(); return; }}
         if ((n || 0) > 40) return;
@@ -1564,14 +1558,6 @@ def gen_blog_index_html(cfg: 'SiteConfig') -> str:
     }}
     
     document.addEventListener('DOMContentLoaded', function() {{ waitForRuntime(loadBlog); }});
-}})();
-</script>"""   }}
-            }} catch(err) {{
-                console.error('[Titan] Blog load error:', err);
-                if (box) box.innerHTML = '<p style="text-align:center;padding:2rem;color:#ef4444;">Could not load blog posts. Publish your Google Sheet: File > Share > Publish to web > CSV format.</p>';
-            }}
-        }});
-    }});
 }})();
 </script>"""
 
